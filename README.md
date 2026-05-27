@@ -80,7 +80,7 @@ export ANTHROPIC_API_KEY=...
 prq postgresql://localhost/mydb
 ```
 
-`prq` is the short alias for `promptquery`. Both work identically.
+`prq` and `pquery` are short aliases for `promptquery`. All three commands work identically.
 
 ### One-shot mode (scripting / CI)
 

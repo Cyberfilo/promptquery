@@ -44,6 +44,7 @@ Issues = "https://github.com/Cyberfilo/promptquery/issues"
 [project.scripts]
 promptquery = "promptquery.cli:main"
 prq = "promptquery.cli:main"
+pquery = "promptquery.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/promptquery"]
