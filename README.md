@@ -1,102 +1,218 @@
 # PromptQuery
 
-> Natural-language SQL for production-scale Postgres schemas.
+> **Natural-language SQL for production-scale Postgres schemas.**
 
-PromptQuery is an open-source CLI that replaces `psql` with natural language — and is the first NL→SQL tool designed to work on real production databases with hundreds of tables.
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python: 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+[![Tests: 37 passing](https://img.shields.io/badge/tests-37%20passing-brightgreen.svg)](tests/)
+[![v0.2.0](https://img.shields.io/badge/version-0.2.0-orange.svg)](https://github.com/Cyberfilo/promptquery/releases/tag/v0.2.0)
 
-```bash
-$ promptquery postgresql://prod-db/mycompany
-? how many users signed up from Italy last month
-```
-
-PromptQuery introspects your schema, generates the SQL, shows it for confirmation, and runs it read-only.
-
-## Why this is different
-
-Every existing NL→SQL tool dumps the full schema into the LLM prompt. That works on a 10-table demo. On a real 500+ table production schema it sends ~50k tokens of mostly-irrelevant context per query — slow, expensive, and (we measured) it actually *hurts* accuracy because the model over-attends to the wrong tables.
-
-**PromptQuery's core bet: schema retrieval, in two stages.**
-
-1. **TF-IDF (with stemming)** narrows the schema from hundreds of tables to ~50 candidates in microseconds, for free.
-2. **An LLM table-selector** (a cheap model — `gpt-4o-mini` by default) picks the ~15 semantically relevant tables from those candidates. This handles the cases TF-IDF can't, e.g. *"invoice"* → `account_move`, *"shipment"* → `stock_picking`.
-3. **FK-graph expansion** walks one hop in each direction to pull in join targets.
+PromptQuery is an open-source CLI that lets you query Postgres in plain English — engineered for **real production schemas with hundreds of tables**, not toy demos. It introspects your schema, generates SQL, shows it for confirmation, and runs it read-only.
 
 ```
-[Question] → [TF-IDF top 50] → [LLM selector top 15] → [FK expand to 25]
-          → [SQL generator LLM] → [Safety guard] → [Confirm] → [Execute]
+$ prq postgresql://prod-db/mycompany
+✓ 675 tables found (sql: openai/gpt-4o, selector: openai/gpt-4o-mini)
+
+PromptQuery — ask a question in plain English, or type "exit".
+
+? unpaid invoices over EUR 1000 with the customer name
+Selecting from 50 candidates...
+Generating SQL...
+Using 14 tables: account_move, res_partner, account_payment, ...
+
+  SELECT am.name AS invoice,
+         am.amount_total AS total,
+         p.name AS customer
+  FROM account_move am
+  JOIN res_partner p ON p.id = am.partner_id
+  WHERE am.move_type = 'out_invoice'
+    AND am.payment_state IN ('not_paid', 'partial')
+    AND am.amount_total > 1000
+  ORDER BY am.amount_total DESC;
+
+Run? [y/N] y
+
+ invoice       │   total │ customer
+───────────────┼─────────┼──────────────────────
+ INV/2026/0042 │ 1899.00 │ Marco Rossi
+ INV/2026/0067 │ 1299.00 │ Acme Industries SRL
+2 row(s)
 ```
 
-### Empirical result
+---
 
-Benchmarked on Odoo's real 675-table production schema, gpt-4o for SQL generation, gpt-4o-mini for the selector:
+## The numbers
 
-| Pipeline | Pass rate | Avg tokens / query | Avg latency |
-|---|---|---|---|
-| Naive (full schema in prompt) | 84.0% | ~50,000 | 3.4 s |
-| PromptQuery v0.1 (TF-IDF only) | 76.0% | ~2,000 | 2.0 s |
-| **PromptQuery v0.2 (TF-IDF + LLM selector)** | **100.0%** | ~5,000 | 5.6 s |
+Benchmarked on Odoo 18's real **675-table** production schema. SQL generation: `gpt-4o`. Table selection: `gpt-4o-mini`.
 
-PromptQuery v0.2 is **+16 pp more accurate** and roughly **10× cheaper per query** than dumping the full schema, at the cost of one extra small LLM call.
+| Pipeline | Accuracy | Tokens / query | Latency |
+|---|---:|---:|---:|
+| Naive (full schema in prompt) | 84.0 % | ~50,000 | 3.4 s |
+| PromptQuery v0.1 *(TF-IDF only)* | 76.0 % | ~2,000 | 2.0 s |
+| **PromptQuery v0.2 *(TF-IDF + LLM selector)*** | **100.0 %** | **~5,000** | 5.6 s |
 
-Reproduce with `python -m eval.parsing_bench --fixture eval/fixtures/odoo.schema.json --questions eval.questions.odoo --model gpt-4o --selector-model gpt-4o-mini`.
+PromptQuery v0.2 is **+16 percentage-points more accurate AND ~10× cheaper per query** than the naive "stuff the whole schema into a prompt" baseline. The two extra seconds buy you both better answers and a much smaller bill.
 
-## Install
+*Receipts in [`eval/results_odoo_v2.json`](eval/results_odoo_v2.json). Reproduce with one command — see [Benchmark](#benchmark) below.*
+
+---
+
+## Quick start
 
 ```bash
 pip install promptquery
-```
 
-Set an API key:
+# Set ONE of these (PromptQuery auto-detects):
+export OPENAI_API_KEY=...
+export ANTHROPIC_API_KEY=...
 
-```bash
-export ANTHROPIC_API_KEY=...   # or OPENAI_API_KEY
-```
-
-## Use
-
-```bash
-promptquery postgresql://localhost/mydb
-```
-
-Or the short alias:
-
-```bash
+# Connect and start asking:
 prq postgresql://localhost/mydb
 ```
 
-### Options
+`prq` is the short alias for `promptquery`. Both work identically.
 
-| Flag | Description |
+---
+
+## How it works
+
+```
+question
+   │
+   ▼
+┌───────────────────┐
+│ TF-IDF (stemmed)  │  Microseconds. Free. Surfaces ~50 candidate tables
+│ retriever         │  by lexical match on names, columns, and comments.
+└────────┬──────────┘
+         │
+         ▼
+┌───────────────────┐
+│ LLM table         │  One small LLM call. Handles semantic mismatches
+│ selector          │  TF-IDF cannot: "invoice" → `account_move`,
+│ (cheap model)     │  "shipment" → `stock_picking`. Picks ~15 tables.
+└────────┬──────────┘
+         │
+         ▼
+┌───────────────────┐
+│ FK-graph          │  One hop outward + inward to pick up join targets
+│ expansion         │  the question didn't name explicitly. Cap at 25.
+└────────┬──────────┘
+         │
+         ▼
+┌───────────────────┐
+│ SQL generator     │  Your real LLM call. Receives ~25 tables, not 675.
+│ (frontier model)  │
+└────────┬──────────┘
+         │
+         ▼
+┌───────────────────┐
+│ Safety guard      │  sqlglot validator: rejects anything that isn't a
+│ (sqlglot)         │  pure SELECT/CTE/UNION. Catches CTEs that hide DML.
+└────────┬──────────┘
+         │
+         ▼
+   "Run? [y/N]" → execute against a read-only Postgres session
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the deep dive (file inventory, design bets, the patent-landmine non-goals).
+
+---
+
+## Configuration
+
+| Flag | Default | Description |
+|---|---|---|
+| `--model` | auto-detect | LLM for SQL generation (e.g. `gpt-4o`, `claude-sonnet-4-6`, `anthropic/claude-opus-4-7`) |
+| `--selector-model` | same as `--model` | LLM for the table-selector step. **A cheaper model is recommended** (e.g. `gpt-4o-mini`) |
+| `--top-k` | 50 | TF-IDF candidates passed to the LLM selector |
+| `--select` | 15 | Tables the LLM selector picks from those candidates |
+| `--max-tables` | 25 | Cap after FK expansion — what the SQL generator actually sees |
+| `--no-selector` | — | Skip the LLM selector (v0.1 behaviour: TF-IDF + FK only) |
+| `-y, --yes` | — | Skip the confirmation prompt before running |
+
+### Environment
+
+| Variable | Purpose |
 |---|---|
-| `--model` | LLM used for SQL generation (e.g. `claude-sonnet-4-6`, `gpt-4o`) |
-| `--selector-model` | LLM used for the table-selector step. Cheaper model recommended (default: same as `--model`) |
-| `--top-k` | TF-IDF candidates passed to the LLM selector (default 50) |
-| `--select` | Tables the LLM selector picks from the candidates (default 15) |
-| `--max-tables` | Cap on tables sent to the SQL generator after FK expansion (default 25) |
-| `--no-selector` | Disable the LLM selector and use TF-IDF + FK expansion only (v0.1 behaviour) |
-| `-y, --yes` | Skip the confirmation prompt before running queries |
+| `OPENAI_API_KEY` | Use OpenAI as the LLM provider |
+| `ANTHROPIC_API_KEY` | Use Anthropic as the LLM provider |
+
+If both are set, Anthropic is preferred. Override either with `--model anthropic/<name>` or `--model openai/<name>`.
+
+---
 
 ## Safety
 
-- The session opens with `default_transaction_read_only = on`.
-- Every generated query is parsed with `sqlglot` and rejected unless it is a single `SELECT` (CTEs and `UNION` allowed).
-- Every query is shown to you before it runs. Confirm with `y`.
+PromptQuery has **two independent layers** so a write is impossible, even if one layer fails:
 
-## What PromptQuery does NOT do
+1. **Session-level**: every Postgres session opens with `default_transaction_read_only = on` and a 60-second `statement_timeout`. The database itself refuses non-SELECT operations.
+2. **Pre-execution**: every generated query is parsed with `sqlglot` and rejected unless it's a single `SELECT` / `WITH` / `UNION` / `INTERSECT` / `EXCEPT`. The validator also catches CTEs that hide DML (`WITH x AS (DELETE …) SELECT * FROM x`) and dangerous-function calls (`pg_terminate_backend`, `set_config`, `lo_export`, `dblink_exec`).
 
-- No writes — `SELECT`-only by design.
-- Postgres only (MySQL and SQLite planned for v0.3).
-- No multi-DB sessions.
-- No data visualization — rows only.
+Every query is also shown to you before it runs. Confirm with `y`.
+
+---
+
+## Benchmark
+
+The eval suite is part of the repo and reproducible:
+
+```bash
+# End-to-end (real Postgres + execution-equality scoring on the shop schema):
+docker compose -f eval/docker-compose.yml up -d
+PGPASSWORD=promptquery psql -h 127.0.0.1 -p 55432 -U promptquery -d shop \
+    -f eval/fixtures/shop.sql \
+    -f eval/fixtures/shop_seed.sql
+python -m eval.end_to_end --model gpt-4o --pad 0 --pad 200
+
+# Parsing-mode (large schemas where seeding data is impractical):
+python -m eval.parsing_bench \
+    --fixture eval/fixtures/odoo.schema.json \
+    --questions eval.questions.odoo \
+    --model gpt-4o --selector-model gpt-4o-mini
+```
+
+The committed [`eval/results_*.json`](eval/) files are receipts of every bench we've run — including unfavourable ones, on purpose.
+
+See [`eval/END_TO_END.md`](eval/END_TO_END.md) for the harness internals.
+
+---
+
+## What PromptQuery does NOT do (yet)
+
+- **No writes.** `SELECT` only, by design and by belt-and-suspenders.
+- **Postgres only.** MySQL and SQLite are on the v0.4 roadmap.
+- **One database at a time.** No multi-DB sessions.
+- **No data visualisation.** Rows out, that's it. Pipe to `csv` / `jq` / your tool of choice.
+
+---
 
 ## Roadmap
 
-- **v0.2** (shipped) — LLM-assisted table selector + stemmed TF-IDF retrieval.
-- **v0.3** — local LLMs (Ollama), schema anonymisation for GDPR, query-history-as-few-shot.
+- **v0.2 (shipped)** — LLM-assisted table selector, stemmed TF-IDF.
+- **v0.3** — local LLMs (Ollama), schema anonymisation (GDPR-by-default), query-history-as-few-shot.
 - **v0.4** — MySQL + SQLite adapters, MCP server mode, public competitor benchmark.
+
+---
+
+## Development
+
+```bash
+git clone https://github.com/Cyberfilo/promptquery
+cd promptquery
+python3.12 -m venv .venv
+.venv/bin/pip install -e ".[dev,openai]"
+
+# Run the unit tests:
+.venv/bin/pytest
+
+# Run the retrieval eval (no API key needed, no DB needed):
+.venv/bin/python -m eval.retrieval
+```
+
+37 tests, all pure-Python — no live database or API key required for the core suite.
+
+---
 
 ## License
 
-Apache-2.0 — see [LICENSE](LICENSE).
-
-Apache-2.0 was chosen over MIT for its **explicit patent grant** and **automatic termination of patent licenses against contributors who sue downstream users**. For a tool that orchestrates LLM-generated SQL across an active patent landscape, the patent clauses matter.
+[Apache-2.0](LICENSE). Apache-2.0 was chosen over MIT specifically for its **explicit patent grant** and **automatic termination** clauses, which matter for a tool that operates in an active NL-to-SQL patent landscape.
