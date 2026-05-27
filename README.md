@@ -76,4 +76,6 @@ prq postgresql://localhost/mydb
 
 ## License
 
-MIT
+Apache-2.0 — see [LICENSE](LICENSE).
+
+Apache-2.0 was chosen over MIT for its **explicit patent grant** and **automatic termination of patent licenses against contributors who sue downstream users**. For a tool that orchestrates LLM-generated SQL across an active patent landscape, the patent clauses matter.
