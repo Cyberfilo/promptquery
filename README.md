@@ -43,7 +43,9 @@ Run? [y/N] y
 
 ## The numbers
 
-Benchmarked on Odoo 18's real **675-table** production schema. SQL generation: `gpt-4o`. Table selection: `gpt-4o-mini`.
+Two independent production-scale schemas. SQL generation: `gpt-4o`. Table selection: `gpt-4o-mini`.
+
+### Odoo 18 ERP — 675 tables ([`eval/fixtures/odoo.schema.json`](eval/fixtures/odoo.schema.json))
 
 | Pipeline | Accuracy | Tokens / query | Latency |
 |---|---:|---:|---:|
@@ -51,9 +53,17 @@ Benchmarked on Odoo 18's real **675-table** production schema. SQL generation: `
 | PromptQuery v0.1 *(TF-IDF only)* | 76.0 % | ~2,000 | 2.0 s |
 | **PromptQuery v0.2 *(TF-IDF + LLM selector)*** | **100.0 %** | **~5,000** | 5.6 s |
 
-PromptQuery v0.2 is **+16 percentage-points more accurate AND ~10× cheaper per query** than the naive "stuff the whole schema into a prompt" baseline. The two extra seconds buy you both better answers and a much smaller bill.
+### EMBL-EBI RNAcentral — 216 tables, biology domain, [public read-only DB](https://rnacentral.org/help/public-database)
 
-*Receipts in [`eval/results_odoo_v2.json`](eval/results_odoo_v2.json). Reproduce with one command — see [Benchmark](#benchmark) below.*
+| Pipeline | Accuracy | Tokens / query | Latency |
+|---|---:|---:|---:|
+| Naive (full schema in prompt) | 82.0 % | ~22,000 | 3.0 s |
+| PromptQuery v0.1 *(TF-IDF only)* | 74.0 % | ~2,000 | 1.9 s |
+| **PromptQuery v0.2 *(TF-IDF + LLM selector)*** | **94.0 %** | **~5,000** | 4.8 s |
+
+Pattern across both benchmarks: PromptQuery v0.2 wins by **+12 to +16 percentage-points** over the naive "stuff the whole schema into a prompt" baseline, at **~5-10× lower per-query token cost**, validated independently on two different production schemas and domains.
+
+*Receipts in [`eval/results_odoo_v2.json`](eval/results_odoo_v2.json) and [`eval/results_rnacentral.json`](eval/results_rnacentral.json). Reproduce both with one command each — see [Benchmark](#benchmark) below.*
 
 ---
 
@@ -164,10 +174,16 @@ PGPASSWORD=promptquery psql -h 127.0.0.1 -p 55432 -U promptquery -d shop \
     -f eval/fixtures/shop_seed.sql
 python -m eval.end_to_end --model gpt-4o --pad 0 --pad 200
 
-# Parsing-mode (large schemas where seeding data is impractical):
+# Parsing-mode on Odoo 18 (675 tables):
 python -m eval.parsing_bench \
     --fixture eval/fixtures/odoo.schema.json \
     --questions eval.questions.odoo \
+    --model gpt-4o --selector-model gpt-4o-mini
+
+# Parsing-mode on EMBL-EBI's public RNAcentral (216 tables, real biology data):
+python -m eval.parsing_bench \
+    --fixture eval/fixtures/rnacentral.schema.json \
+    --questions eval.questions.rnacentral \
     --model gpt-4o --selector-model gpt-4o-mini
 ```
 
