@@ -14,6 +14,23 @@ class Column:
     nullable: bool
     is_primary_key: bool
 
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "data_type": self.data_type,
+            "nullable": self.nullable,
+            "is_primary_key": self.is_primary_key,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Column":
+        return cls(
+            name=data["name"],
+            data_type=data["data_type"],
+            nullable=bool(data["nullable"]),
+            is_primary_key=bool(data["is_primary_key"]),
+        )
+
 
 @dataclass(frozen=True)
 class ForeignKey:
@@ -21,6 +38,23 @@ class ForeignKey:
     referenced_schema: str
     referenced_table: str
     referenced_column: str
+
+    def to_dict(self) -> dict:
+        return {
+            "column": self.column,
+            "referenced_schema": self.referenced_schema,
+            "referenced_table": self.referenced_table,
+            "referenced_column": self.referenced_column,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ForeignKey":
+        return cls(
+            column=data["column"],
+            referenced_schema=data["referenced_schema"],
+            referenced_table=data["referenced_table"],
+            referenced_column=data["referenced_column"],
+        )
 
 
 @dataclass
@@ -37,6 +71,25 @@ class Table:
             return self.name
         return f"{self.schema}.{self.name}"
 
+    def to_dict(self) -> dict:
+        return {
+            "schema": self.schema,
+            "name": self.name,
+            "comment": self.comment,
+            "columns": [c.to_dict() for c in self.columns],
+            "foreign_keys": [fk.to_dict() for fk in self.foreign_keys],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Table":
+        return cls(
+            schema=data["schema"],
+            name=data["name"],
+            comment=data.get("comment"),
+            columns=[Column.from_dict(c) for c in data.get("columns", [])],
+            foreign_keys=[ForeignKey.from_dict(fk) for fk in data.get("foreign_keys", [])],
+        )
+
 
 @dataclass
 class Schema:
@@ -44,6 +97,13 @@ class Schema:
 
     def by_qualified_name(self) -> dict[str, Table]:
         return {t.qualified_name: t for t in self.tables}
+
+    def to_dict(self) -> dict:
+        return {"tables": [t.to_dict() for t in self.tables]}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Schema":
+        return cls(tables=[Table.from_dict(t) for t in data["tables"]])
 
 
 INTROSPECT_TABLES = """
