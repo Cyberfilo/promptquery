@@ -13,14 +13,32 @@ PromptQuery introspects your schema, generates the SQL, shows it for confirmatio
 
 ## Why this is different
 
-Every existing NL→SQL tool dumps the full schema into the LLM prompt. That works on a 10-table demo. It breaks at 100 tables. It's impossible at 500.
+Every existing NL→SQL tool dumps the full schema into the LLM prompt. That works on a 10-table demo. On a real 500+ table production schema it sends ~50k tokens of mostly-irrelevant context per query — slow, expensive, and (we measured) it actually *hurts* accuracy because the model over-attends to the wrong tables.
 
-**PromptQuery's core bet: schema retrieval.** Before calling the LLM, rank tables by relevance to the question and only include the top ~20. The LLM never sees more than a fraction of the schema at once.
+**PromptQuery's core bet: schema retrieval, in two stages.**
+
+1. **TF-IDF (with stemming)** narrows the schema from hundreds of tables to ~50 candidates in microseconds, for free.
+2. **An LLM table-selector** (a cheap model — `gpt-4o-mini` by default) picks the ~15 semantically relevant tables from those candidates. This handles the cases TF-IDF can't, e.g. *"invoice"* → `account_move`, *"shipment"* → `stock_picking`.
+3. **FK-graph expansion** walks one hop in each direction to pull in join targets.
 
 ```
-[Question] → [Rank by TF-IDF] → [Walk FK graph] → [Top 20 tables]
-          → [LLM] → [SQL] → [Safety guard] → [Confirm] → [Execute]
+[Question] → [TF-IDF top 50] → [LLM selector top 15] → [FK expand to 25]
+          → [SQL generator LLM] → [Safety guard] → [Confirm] → [Execute]
 ```
+
+### Empirical result
+
+Benchmarked on Odoo's real 675-table production schema, gpt-4o for SQL generation, gpt-4o-mini for the selector:
+
+| Pipeline | Pass rate | Avg tokens / query | Avg latency |
+|---|---|---|---|
+| Naive (full schema in prompt) | 84.0% | ~50,000 | 3.4 s |
+| PromptQuery v0.1 (TF-IDF only) | 76.0% | ~2,000 | 2.0 s |
+| **PromptQuery v0.2 (TF-IDF + LLM selector)** | **100.0%** | ~5,000 | 5.6 s |
+
+PromptQuery v0.2 is **+16 pp more accurate** and roughly **10× cheaper per query** than dumping the full schema, at the cost of one extra small LLM call.
+
+Reproduce with `python -m eval.parsing_bench --fixture eval/fixtures/odoo.schema.json --questions eval.questions.odoo --model gpt-4o --selector-model gpt-4o-mini`.
 
 ## Install
 
@@ -50,9 +68,12 @@ prq postgresql://localhost/mydb
 
 | Flag | Description |
 |---|---|
-| `--model` | Override LLM (e.g. `claude-sonnet-4-6`, `gpt-4o`) |
-| `--top-k` | Initial number of tables to retrieve (default 10) |
-| `--max-tables` | Cap on tables sent to LLM after FK expansion (default 20) |
+| `--model` | LLM used for SQL generation (e.g. `claude-sonnet-4-6`, `gpt-4o`) |
+| `--selector-model` | LLM used for the table-selector step. Cheaper model recommended (default: same as `--model`) |
+| `--top-k` | TF-IDF candidates passed to the LLM selector (default 50) |
+| `--select` | Tables the LLM selector picks from the candidates (default 15) |
+| `--max-tables` | Cap on tables sent to the SQL generator after FK expansion (default 25) |
+| `--no-selector` | Disable the LLM selector and use TF-IDF + FK expansion only (v0.1 behaviour) |
 | `-y, --yes` | Skip the confirmation prompt before running queries |
 
 ## Safety
@@ -61,7 +82,7 @@ prq postgresql://localhost/mydb
 - Every generated query is parsed with `sqlglot` and rejected unless it is a single `SELECT` (CTEs and `UNION` allowed).
 - Every query is shown to you before it runs. Confirm with `y`.
 
-## What v0.1 does NOT do
+## What PromptQuery does NOT do
 
 - No writes — `SELECT`-only by design.
 - Postgres only (MySQL and SQLite planned for v0.3).
@@ -70,9 +91,9 @@ prq postgresql://localhost/mydb
 
 ## Roadmap
 
-- **v0.2** — embedding-based ranking, query history as few-shot examples.
-- **v0.3** — MySQL + SQLite, local LLMs (Ollama).
-- **v0.4** — MCP server mode, public benchmark suite.
+- **v0.2** (shipped) — LLM-assisted table selector + stemmed TF-IDF retrieval.
+- **v0.3** — local LLMs (Ollama), schema anonymisation for GDPR, query-history-as-few-shot.
+- **v0.4** — MySQL + SQLite adapters, MCP server mode, public competitor benchmark.
 
 ## License
 

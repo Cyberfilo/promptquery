@@ -20,14 +20,34 @@ _STOPWORDS = {
 }
 
 
+def _stem(word: str) -> str:
+    """Light plural→singular normalisation so `leads` matches `lead` etc."""
+    if len(word) > 5 and word.endswith("ies"):
+        return word[:-3] + "y"          # companies -> company, categories -> category
+    if len(word) > 4 and word.endswith("sses"):
+        return word[:-2]                # addresses -> address
+    if len(word) > 4 and word.endswith("xes"):
+        return word[:-2]                # taxes -> tax
+    if len(word) > 4 and word.endswith("ches"):
+        return word[:-2]                # batches -> batch
+    if len(word) > 4 and word.endswith("shes"):
+        return word[:-2]                # wishes -> wish
+    if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]                # leads -> lead, users -> user
+    return word
+
+
 def tokenize(text: str) -> list[str]:
     if not text:
         return []
     expanded = _CAMEL_RE.sub(r"\1 \2", text).replace("_", " ").replace("-", " ")
-    return [
-        t.lower() for t in _WORD_RE.findall(expanded)
-        if t.lower() not in _STOPWORDS
-    ]
+    out: list[str] = []
+    for raw in _WORD_RE.findall(expanded):
+        t = raw.lower()
+        if t in _STOPWORDS:
+            continue
+        out.append(_stem(t))
+    return out
 
 
 def _table_terms(table: Table) -> list[str]:
@@ -136,3 +156,97 @@ def expand_via_fks(
             selected[key] = table
 
     return list(selected.values())
+
+
+# --- LLM-assisted table selector ------------------------------------------
+# Second stage of v0.2 retrieval: TF-IDF gives us a wide candidate set
+# (~50 tables), the LLM then reads the candidate list and the question and
+# returns just the relevant tables. Handles semantic mismatch that TF-IDF
+# misses — e.g. "invoice" ↔ Odoo's `account_move`, "shipment" ↔ `stock_picking`.
+
+
+_SELECTOR_SYSTEM = """\
+You select database tables relevant to a natural-language question.
+
+Each candidate table is shown with up to five of its column names and any
+table comment. Pick the tables that ANY correct SQL answer would need to
+reference.
+
+Consider semantic equivalents the table name doesn't spell out (for
+example, in Odoo `account_move` holds invoices, `res_partner` holds
+customers/vendors/contacts, `stock_picking` holds shipments).
+
+Output ONLY a JSON array of table names, ordered by relevance, with up to
+{max_select} items.
+
+Example: ["sale_order", "res_partner", "product_product"]
+
+Candidate tables:
+{candidate_block}
+"""
+
+_JSON_ARRAY_RE = re.compile(r"\[[\s\S]*?\]")
+
+
+def _candidate_block(candidates: list[Table]) -> str:
+    lines: list[str] = []
+    for t in candidates:
+        cols = ", ".join(c.name for c in t.columns[:5])
+        more = f", +{len(t.columns) - 5}" if len(t.columns) > 5 else ""
+        line = f"- {t.qualified_name}({cols}{more})"
+        if t.comment:
+            line += f"  -- {t.comment[:80]}"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def llm_select_tables(
+    question: str,
+    candidates: list[Table],
+    llm,
+    max_select: int = 15,
+) -> list[Table]:
+    """Use the LLM to pick the relevant tables out of a TF-IDF candidate set.
+
+    Falls back to the candidate prefix on any error (network, parse,
+    schema-naming-mismatch) so the pipeline degrades gracefully into v1
+    behavior rather than crashing.
+    """
+    if len(candidates) <= max_select:
+        return candidates
+
+    system = _SELECTOR_SYSTEM.format(
+        max_select=max_select,
+        candidate_block=_candidate_block(candidates),
+    )
+
+    try:
+        response = llm.generate(system, question)
+    except Exception:
+        return candidates[:max_select]
+
+    match = _JSON_ARRAY_RE.search(response)
+    if not match:
+        return candidates[:max_select]
+    import json
+    try:
+        names = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return candidates[:max_select]
+    if not isinstance(names, list):
+        return candidates[:max_select]
+
+    by_name: dict[str, Table] = {t.name.lower(): t for t in candidates}
+    selected: list[Table] = []
+    seen: set[str] = set()
+    for n in names:
+        if not isinstance(n, str):
+            continue
+        key = n.lower().rsplit(".", 1)[-1]
+        if key in by_name and key not in seen:
+            selected.append(by_name[key])
+            seen.add(key)
+        if len(selected) >= max_select:
+            break
+
+    return selected or candidates[:max_select]

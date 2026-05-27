@@ -59,15 +59,23 @@ class OpenAIClient(LLMClient):
         self._client = openai.OpenAI(api_key=key)
         self.model = model
 
+    # Reasoning-class OpenAI models (GPT-5.x, o1, o3, o4) accept
+    # `max_completion_tokens` and reject the legacy `max_tokens` parameter.
+    _REASONING_PREFIXES = ("gpt-5", "o1", "o3", "o4")
+
     def generate(self, system: str, user: str) -> str:
-        response = self._client.chat.completions.create(
-            model=self.model,
-            max_tokens=2000,
-            messages=[
+        kwargs: dict = {
+            "model": self.model,
+            "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-        )
+        }
+        if self.model.startswith(self._REASONING_PREFIXES):
+            kwargs["max_completion_tokens"] = 4000
+        else:
+            kwargs["max_tokens"] = 2000
+        response = self._client.chat.completions.create(**kwargs)
         return response.choices[0].message.content or ""
 
 

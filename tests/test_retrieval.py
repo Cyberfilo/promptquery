@@ -19,7 +19,17 @@ def test_tokenize_drops_stopwords():
     tokens = tokenize("how many users")
     assert "how" not in tokens
     assert "many" not in tokens
-    assert "users" in tokens
+    # Stemmed: 'users' -> 'user' so plural questions match singular table names.
+    assert "user" in tokens
+
+
+def test_tokenize_stems_common_plurals():
+    """Plural→singular normalisation so questions match table names."""
+    assert "lead" in tokenize("show me leads")           # crm_lead vs 'leads'
+    assert "invoice" in tokenize("unpaid invoices")
+    assert "address" in tokenize("default addresses")    # 'addresses' -> 'address'
+    assert "company" in tokenize("companies in Italy")   # ies -> y
+    assert "tax" in tokenize("which taxes apply")        # xes -> x
 
 
 def _schema() -> Schema:

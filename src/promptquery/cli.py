@@ -12,7 +12,7 @@ from .db import Database
 from .llm import LLMError, extract_sql, make_client
 from .prompts import build_system_prompt
 from .render import render_results, render_sql
-from .retrieval import TfIdfRetriever, expand_via_fks
+from .retrieval import TfIdfRetriever, expand_via_fks, llm_select_tables
 from .safety import UnsafeQuery, validate_select_only
 from .schema import introspect
 
@@ -25,16 +25,34 @@ from .schema import introspect
     help="LLM model (e.g. claude-sonnet-4-6, gpt-4o, anthropic/claude-opus-4-7).",
 )
 @click.option(
+    "--selector-model",
+    default=None,
+    help="LLM used for the table-selector step (defaults to --model). "
+         "Recommended: a cheaper model (e.g. gpt-4o-mini) than the SQL generator.",
+)
+@click.option(
     "--top-k",
-    default=10,
+    default=50,
     show_default=True,
-    help="Number of tables to retrieve by relevance before FK expansion.",
+    help="Number of candidate tables to surface from TF-IDF before the LLM selector.",
+)
+@click.option(
+    "--select",
+    "select_n",
+    default=15,
+    show_default=True,
+    help="Tables the LLM selector picks from the TF-IDF candidates (before FK expansion).",
 )
 @click.option(
     "--max-tables",
-    default=20,
+    default=25,
     show_default=True,
     help="Maximum tables sent to the LLM after FK expansion.",
+)
+@click.option(
+    "--no-selector",
+    is_flag=True,
+    help="Disable the LLM table-selector and use TF-IDF + FK expansion only (v0.1 behavior).",
 )
 @click.option(
     "-y",
@@ -43,7 +61,9 @@ from .schema import introspect
     help="Skip the confirmation prompt and execute generated SQL immediately.",
 )
 @click.version_option(__version__, prog_name="promptquery")
-def main(dsn: str, model: str | None, top_k: int, max_tables: int, yes: bool) -> None:
+def main(dsn: str, model: str | None, selector_model: str | None,
+         top_k: int, select_n: int, max_tables: int,
+         no_selector: bool, yes: bool) -> None:
     """PromptQuery — natural-language SQL for Postgres.
 
     DSN is a libpq connection string, e.g. postgresql://user:pass@host/db.
@@ -55,6 +75,17 @@ def main(dsn: str, model: str | None, top_k: int, max_tables: int, yes: bool) ->
     except LLMError as e:
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
+
+    if no_selector:
+        selector_llm = None
+    else:
+        try:
+            selector_llm = (
+                make_client(selector_model) if selector_model else llm
+            )
+        except LLMError as e:
+            console.print(f"[red]Selector LLM error:[/red] {e}")
+            sys.exit(1)
 
     console.print(f"[dim]Connecting to[/dim] {_redact(dsn)} [dim]...[/dim]")
     try:
@@ -69,8 +100,13 @@ def main(dsn: str, model: str | None, top_k: int, max_tables: int, yes: bool) ->
         if not schema.tables:
             console.print("[yellow]No tables found in this database.[/yellow]")
             return
+        selector_info = (
+            f", selector: {selector_llm.name}/{selector_llm.model}"
+            if selector_llm is not None and selector_llm is not llm
+            else (" (selector: same)" if selector_llm is not None else " (selector: off)")
+        )
         console.print(f"[green]✓[/green] {len(schema.tables)} tables found "
-                      f"[dim](LLM: {llm.name}/{llm.model})[/dim]")
+                      f"[dim](sql: {llm.name}/{llm.model}{selector_info})[/dim]")
 
         retriever = TfIdfRetriever(schema)
         session: PromptSession[str] = PromptSession(history=InMemoryHistory())
@@ -92,8 +128,22 @@ def main(dsn: str, model: str | None, top_k: int, max_tables: int, yes: bool) ->
                 break
 
             ranked = retriever.rank(question, top_k=top_k)
-            seed = [t for t, score in ranked if score > 0] or [t for t, _ in ranked[:3]]
-            relevant = expand_via_fks(schema, seed, max_total=max_tables)
+            candidates = [t for t, score in ranked if score > 0] or [t for t, _ in ranked[:3]]
+
+            if selector_llm is not None and len(candidates) > select_n:
+                console.print(
+                    f"[dim]Selecting from {len(candidates)} candidates...[/dim]"
+                )
+                try:
+                    selected = llm_select_tables(
+                        question, candidates, selector_llm, max_select=select_n,
+                    )
+                    if selected:
+                        candidates = selected
+                except Exception as e:
+                    console.print(f"[yellow]Selector error, using TF-IDF only:[/yellow] {e}")
+
+            relevant = expand_via_fks(schema, candidates, max_total=max_tables)
 
             preview = ", ".join(t.qualified_name for t in relevant[:5])
             suffix = "..." if len(relevant) > 5 else ""
