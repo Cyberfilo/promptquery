@@ -2,9 +2,9 @@
 
 > **Natural-language SQL for production-scale Postgres schemas.**
 
+[![CI](https://github.com/Cyberfilo/promptquery/actions/workflows/ci.yml/badge.svg)](https://github.com/Cyberfilo/promptquery/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python: 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
-[![Tests: 37 passing](https://img.shields.io/badge/tests-37%20passing-brightgreen.svg)](tests/)
 [![v0.2.0](https://img.shields.io/badge/version-0.2.0-orange.svg)](https://github.com/Cyberfilo/promptquery/releases/tag/v0.2.0)
 
 PromptQuery is an open-source CLI that lets you query Postgres in plain English — engineered for **real production schemas with hundreds of tables**, not toy demos. It introspects your schema, generates SQL, shows it for confirmation, and runs it read-only.
@@ -81,6 +81,33 @@ prq postgresql://localhost/mydb
 ```
 
 `prq` is the short alias for `promptquery`. Both work identically.
+
+### One-shot mode (scripting / CI)
+
+`--query` skips the REPL and returns machine-readable output. Progress messages go to stderr, results to stdout — pipe-friendly:
+
+```bash
+prq --query "how many users in Italy" postgresql://localhost/mydb         # JSON to stdout
+prq --query "top 10 orders by total" --out csv postgresql://... > out.csv
+prq --query "..." --out table postgresql://...                            # rich-formatted table
+```
+
+Exit codes: `0` success · `1` LLM/connection error · `2` safety-guard rejection · `3` execution error.
+
+### Try it without setting up a database
+
+EMBL-EBI publishes a **public read-only Postgres** with real biological RNA-sequence data (216 tables). Install PromptQuery and try it in under a minute:
+
+```bash
+pip install promptquery
+export OPENAI_API_KEY=...
+
+prq --query "show me the 5 latest blog posts with their title" \
+  --selector-model gpt-4o-mini \
+  postgresql://reader:NWDMCE5xdipIjRrp@hh-pgsql-public.ebi.ac.uk:5432/pfmegrnargs
+```
+
+(Credentials above are EMBL-EBI's public read-only — published for tutorial use.)
 
 ---
 
