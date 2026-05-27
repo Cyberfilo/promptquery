@@ -1,0 +1,109 @@
+from __future__ import annotations
+
+import os
+import re
+from abc import ABC, abstractmethod
+
+
+class LLMError(RuntimeError):
+    pass
+
+
+class LLMClient(ABC):
+    name: str
+
+    @abstractmethod
+    def generate(self, system: str, user: str) -> str: ...
+
+
+class AnthropicClient(LLMClient):
+    name = "anthropic"
+
+    def __init__(self, model: str = "claude-sonnet-4-6", api_key: str | None = None):
+        try:
+            import anthropic
+        except ImportError as e:
+            raise LLMError("anthropic package not installed") from e
+        key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        if not key:
+            raise LLMError("ANTHROPIC_API_KEY is not set")
+        self._client = anthropic.Anthropic(api_key=key)
+        self.model = model
+
+    def generate(self, system: str, user: str) -> str:
+        response = self._client.messages.create(
+            model=self.model,
+            max_tokens=2000,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        parts: list[str] = []
+        for block in response.content:
+            text = getattr(block, "text", None)
+            if text:
+                parts.append(text)
+        return "".join(parts)
+
+
+class OpenAIClient(LLMClient):
+    name = "openai"
+
+    def __init__(self, model: str = "gpt-4o", api_key: str | None = None):
+        try:
+            import openai
+        except ImportError as e:
+            raise LLMError("openai package not installed (pip install promptquery[openai])") from e
+        key = api_key or os.environ.get("OPENAI_API_KEY")
+        if not key:
+            raise LLMError("OPENAI_API_KEY is not set")
+        self._client = openai.OpenAI(api_key=key)
+        self.model = model
+
+    def generate(self, system: str, user: str) -> str:
+        response = self._client.chat.completions.create(
+            model=self.model,
+            max_tokens=2000,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        )
+        return response.choices[0].message.content or ""
+
+
+_SQL_BLOCK_RE = re.compile(r"```(?:sql)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
+
+
+def extract_sql(text: str) -> str:
+    match = _SQL_BLOCK_RE.search(text)
+    if match:
+        return match.group(1).strip().rstrip(";").strip()
+    return text.strip().rstrip(";").strip()
+
+
+def make_client(model_spec: str | None = None) -> LLMClient:
+    if model_spec:
+        provider, _, model = model_spec.partition("/")
+        if not model:
+            # No explicit provider — guess from model name
+            if provider.startswith("claude"):
+                return AnthropicClient(model=provider)
+            if provider.startswith("gpt") or provider.startswith("o1") or provider.startswith("o3"):
+                return OpenAIClient(model=provider)
+            raise LLMError(
+                f"Cannot infer provider from model {provider!r}. "
+                "Use 'anthropic/<model>' or 'openai/<model>'."
+            )
+        if provider == "anthropic":
+            return AnthropicClient(model=model)
+        if provider == "openai":
+            return OpenAIClient(model=model)
+        raise LLMError(f"Unknown provider: {provider!r}")
+
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return AnthropicClient()
+    if os.environ.get("OPENAI_API_KEY"):
+        return OpenAIClient()
+    raise LLMError(
+        "No LLM API key found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY."
+    )
