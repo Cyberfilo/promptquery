@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Primary meta -->
+  <title>PromptQuery — query Postgres in plain English from the terminal</title>
+  <meta name="description" content="Read-only natural-language to SQL for production-scale Postgres. A deterministic CLI built for schemas with hundreds of tables — two safety layers, honest benchmarks, Apache-2.0." />
+  <meta name="keywords" content="natural language to SQL postgres, text to sql CLI, query postgres in plain english, read-only natural language to SQL, postgres natural language query tool, text to sql hundreds of tables, deterministic text to sql, nl2sql postgres open source, plain english SQL terminal" />
+  <meta name="author" content="Filippo Menghi" />
+  <link rel="canonical" href="https://prq.menghi.dev" />
+  <meta name="theme-color" content="#0d0e14" />
+  <meta name="color-scheme" content="dark" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="PromptQuery — plain English to read-only Postgres SQL" />
+  <meta property="og:description" content="Deterministic NL→SQL CLI for production schemas with hundreds of tables. Two safety layers. Honest, committed benchmarks." />
+  <meta property="og:image" content="https://prq.menghi.dev/assets/demo-still.png" />
+  <meta property="og:url" content="https://prq.menghi.dev" />
+  <meta property="og:site_name" content="PromptQuery" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="PromptQuery — plain English to read-only Postgres SQL" />
+  <meta name="twitter:description" content="SQL is engineering, not conversation. Deterministic, read-only, production-scale text-to-SQL for Postgres." />
+  <meta name="twitter:image" content="https://prq.menghi.dev/assets/demo-still.png" />
+
+  <!-- Inline SVG favicon: prq prompt caret in terminal green -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d0e14'/%3E%3Cpath d='M8 10l6 6-6 6' fill='none' stroke='%233fb950' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cline x1='17' y1='22' x2='24' y2='22' stroke='%233fb950' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E" />
+
+  <!-- Fonts: JetBrains Mono (display/mono) + IBM Plex Sans (body). One preconnect, swap. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- JSON-LD: SoftwareApplication -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "PromptQuery",
+    "alternateName": "prq",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Linux, macOS, Windows",
+    "description": "Read-only natural-language to SQL for production-scale Postgres. A deterministic command-line tool built for schemas with hundreds of tables.",
+    "url": "https://prq.menghi.dev",
+    "downloadUrl": "https://pypi.org/project/promptquery/",
+    "softwareVersion": "0.2.1",
+    "license": "https://www.apache.org/licenses/LICENSE-2.0",
+    "author": { "@type": "Person", "name": "Filippo Menghi" },
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  }
+  </script>
+</head>
+<body>
+  <!-- Cloudflare Pages: deploys as-is, no build step. For a custom domain, add a CNAME
+       record (prq.menghi.dev -> the Pages project) in the Cloudflare dashboard; no
+       in-repo server config is required. -->
+
+  <a class="skip-link" href="#demo">Skip to demo</a>
+
+  <!-- ===== Header ===== -->
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="#top" aria-label="PromptQuery home">
+        <span class="brand-mark" aria-hidden="true">&gt;_</span>
+        <span class="brand-name">prompt<span class="brand-accent">query</span></span>
+      </a>
+      <nav class="nav" aria-label="Primary">
+        <a href="#numbers">Benchmarks</a>
+        <a href="#how">How it works</a>
+        <a href="#safety">Safety</a>
+        <a href="#compare">Compare</a>
+        <a href="#try">Try it</a>
+        <a class="nav-cta" href="https://github.com/Cyberfilo/promptquery" target="_blank" rel="noopener">GitHub ↗</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- ===== Hero ===== -->
+    <section class="hero" aria-labelledby="hero-headline">
+      <div class="wrap hero-inner">
+        <p class="eyebrow">
+          <span class="badge">Apache-2.0</span>
+          <span class="badge">Postgres-native</span>
+          <span class="badge">read-only by construction</span>
+        </p>
+
+        <h1 id="hero-headline">
+          SQL is engineering,<br />not conversation.
+        </h1>
+
+        <p class="subhead">
+          PromptQuery (<code>prq</code>) turns plain English into <strong>read-only</strong> Postgres SQL —
+          deterministically, on schemas with <strong>hundreds of tables</strong>, not toy demos.
+          It introspects your schema, generates the query, shows it to you, and runs it read-only.
+          No chat. No drift.
+        </p>
+
+        <!-- Install one-liner -->
+        <div class="install-row">
+          <div class="install" role="group" aria-label="Install command">
+            <span class="install-prompt" aria-hidden="true">$</span>
+            <code id="install-cmd">pip install promptquery</code>
+            <button class="copy-btn" type="button" data-copy="pip install promptquery" aria-label="Copy install command">
+              <span class="copy-label">Copy</span>
+            </button>
+          </div>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="https://github.com/Cyberfilo/promptquery" target="_blank" rel="noopener">
+              View on GitHub
+            </a>
+            <a class="btn btn-ghost" href="https://pypi.org/project/promptquery/" target="_blank" rel="noopener">
+              PyPI
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Demo (the centerpiece) ===== -->
+      <div class="wrap" id="demo">
+        <figure class="demo">
+          <div class="demo-chrome" aria-hidden="true">
+            <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+            <span class="demo-title">prq — postgresql://shop</span>
+          </div>
+          <video
+            class="demo-video"
+            autoplay
+            muted
+            loop
+            playsinline
+            preload="metadata"
+            poster="assets/demo-still.png"
+            aria-label="PromptQuery CLI converting plain English to read-only Postgres SQL, showing the query for confirmation before running it">
+            <source src="assets/demo.mp4" type="video/mp4" />
+            <!-- Fallback for browsers that won't play the mp4 -->
+            <img src="assets/demo.gif" alt="PromptQuery CLI converting a plain-English question into a read-only Postgres SELECT, then asking for confirmation before running it." />
+          </video>
+          <figcaption class="demo-cap">
+            One question, end to end: plain English in → tables picked from the schema →
+            a single read-only <code>SELECT</code> → <code>Run? [y/N]</code> → rows out.
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ===== The numbers ===== -->
+    <section class="section numbers" id="numbers" aria-labelledby="numbers-title">
+      <div class="wrap">
+        <p class="kicker">The numbers</p>
+        <h2 id="numbers-title">The pitch isn't a demo. It's a benchmark — with the failures committed.</h2>
+        <p class="lede">
+          Retrieval accuracy on two real, recognizable production schemas. Not Spider, not BIRD,
+          not a 10-table fixture. Every run — including the unfavourable ones — is a JSON receipt
+          checked into the repo, reproducible with one command.
+        </p>
+
+        <div class="stat-grid">
+          <article class="stat-card">
+            <div class="stat-top">
+              <span class="stat-value">100<span class="pct">%</span></span>
+              <span class="stat-delta">+16pp vs naive</span>
+            </div>
+            <h3 class="stat-name">Odoo 18 ERP</h3>
+            <p class="stat-meta">675 tables · 25 questions</p>
+            <p class="stat-desc">A real, FK-linked ERP schema — the kind that breaks every tool that stuffs the whole thing into a prompt.</p>
+          </article>
+
+          <article class="stat-card">
+            <div class="stat-top">
+              <span class="stat-value">94<span class="pct">%</span></span>
+              <span class="stat-delta">+12pp vs naive</span>
+            </div>
+            <h3 class="stat-name">EMBL-EBI RNAcentral</h3>
+            <p class="stat-meta">216 tables · 50 questions</p>
+            <p class="stat-desc">An unrelated scientific database, public and read-only. Same shape of result on a completely different domain.</p>
+          </article>
+        </div>
+
+        <p class="receipts-note">
+          <span class="r-tag">conditions</span>
+          Parsing-mode retrieval accuracy — does the generated SQL reference the tables the question
+          must touch — measured with <code>gpt-4o</code> for generation and <code>gpt-4o-mini</code> as the
+          table selector, on the PromptQuery v0.2 pipeline. Not execution-equality. Stated plainly because
+          a number without its conditions is marketing, not evidence.
+        </p>
+        <p class="receipts-note muted">
+          The naive "stuff the whole schema into one prompt" baseline scored 84% on Odoo and 82% on
+          RNAcentral. The v0.1 pipeline actually did <em>worse</em> than naive on both — that receipt is
+          committed too, on purpose.
+        </p>
+        <a class="text-link" href="https://github.com/Cyberfilo/promptquery" target="_blank" rel="noopener">Reproduce the benchmarks → eval/ in the repo</a>
+      </div>
+    </section>
+
+    <!-- ===== How it works ===== -->
+    <section class="section how" id="how" aria-labelledby="how-title">
+      <div class="wrap">
+        <p class="kicker">How it works</p>
+        <h2 id="how-title">A retrieval problem, not a chat problem.</h2>
+        <p class="lede">
+          The hard part of text-to-SQL on a 675-table schema isn't writing the SQL — it's finding the
+          six tables that matter, every time, without drifting. The pipeline is mechanical and you can
+          read each stage:
+        </p>
+
+        <ol class="pipeline" aria-label="The PromptQuery pipeline">
+          <li class="step">
+            <span class="step-no">01</span>
+            <div class="step-body">
+              <h3>Introspect</h3>
+              <p>On connect, read the full schema from <code>pg_catalog</code> — tables, columns, types, and the foreign-key graph. No embeddings, no GPU, no model download. It works the instant you connect.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step-no">02</span>
+            <div class="step-body">
+              <h3>Rank — TF-IDF retrieval</h3>
+              <p>Score every table against the question by stemmed TF-IDF over names, comments, columns and FK targets. Top <strong>50</strong> candidates surface. Pure Python; the cost is that it can't reason about synonyms — which is what the next step is for.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step-no">03</span>
+            <div class="step-body">
+              <h3>Select — a cheap LLM call</h3>
+              <p>One small model reads the candidate list and the question, and returns the <strong>~15</strong> tables that are actually relevant — catching the semantic gaps TF-IDF misses (<code>"invoice"</code> → <code>account_move</code>). Fails closed: any error falls back to the TF-IDF prefix.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step-no">04</span>
+            <div class="step-body">
+              <h3>Expand — walk the FK graph</h3>
+              <p>Walk one hop out and one hop in across the foreign-key graph to pick up join targets the question never named. Capped at <strong>25</strong> tables — that's all the generator ever sees, instead of all 675.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step-no">05</span>
+            <div class="step-body">
+              <h3>Generate — deterministically</h3>
+              <p>The frontier model receives ~25 tables and writes a single <code>SELECT</code>. Temperature 0 (and a fixed seed on OpenAI chat models): the same question yields the same SQL. Deterministic by default — best-effort across model snapshots, and reasoning models are the explicit exception.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step-no">06</span>
+            <div class="step-body">
+              <h3>Validate, confirm, run</h3>
+              <p>Two safety layers reject anything that isn't read-only, the query is shown to you, and only an explicit <code>y</code> runs it — read-only, with a 60-second timeout. Rows out as a table, JSON, or CSV.</p>
+            </div>
+          </li>
+        </ol>
+
+        <p class="defaults-line">
+          <span class="r-tag">defaults</span>
+          50 candidates → 15 selected → 25 max tables. Every cap is a tunable flag.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===== Safety ===== -->
+    <section class="section safety" id="safety" aria-labelledby="safety-title">
+      <div class="wrap">
+        <p class="kicker">Safety</p>
+        <h2 id="safety-title">Two independent layers. A write is designed to be impossible.</h2>
+        <p class="lede">
+          The audience's deepest fear is a tool writing to prod. So the read-only guarantee is
+          belt-and-suspenders: two redundant layers, either of which alone would block a write. Even
+          a jailbroken prompt can't mutate the database.
+        </p>
+
+        <div class="safety-grid">
+          <article class="safety-card">
+            <span class="layer-tag">Layer A · database-enforced</span>
+            <h3>The session opens read-only</h3>
+            <p>
+              Every connection runs <code>SET&nbsp;default_transaction_read_only&nbsp;=&nbsp;on</code> before any
+              query — Postgres itself refuses non-<code>SELECT</code> operations — plus a
+              <code>statement_timeout</code> of <strong>60&nbsp;seconds</strong>. The guarantee comes from the
+              database, not the application.
+            </p>
+          </article>
+
+          <article class="safety-card">
+            <span class="layer-tag">Layer B · pre-execution</span>
+            <h3>An AST guard rejects non-reads</h3>
+            <p>
+              Before anything runs, the generated SQL is parsed with <code>sqlglot</code> in Postgres dialect
+              and rejected unless it's a single read-only statement. It catches CTEs that try to hide a
+              <code>DELETE</code> — <code>WITH x AS (DELETE … RETURNING …) SELECT * FROM x</code> — via a recursive
+              scan, and blocks <strong>8</strong> state-mutating Postgres functions by name.
+            </p>
+          </article>
+        </div>
+
+        <p class="safety-foot">
+          <span class="r-tag">plus</span>
+          A third practical guard: every query is shown to you and waits for an explicit
+          <code>y / yes</code> before it runs. Runs on your machine, against your database — your data
+          never leaves the box.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===== Compare ===== -->
+    <section class="section compare" id="compare" aria-labelledby="compare-title">
+      <div class="wrap">
+        <p class="kicker">How it compares</p>
+        <h2 id="compare-title">Honest about where the others are good.</h2>
+        <p class="lede">
+          Vanna, WrenAI and IDE assistants are genuinely good tools — at the jobs they're built for.
+          PromptQuery doesn't win on breadth. It wins on a narrow axis: CLI-first, deterministic,
+          read-only by construction, and built for production scale.
+        </p>
+
+        <div class="table-scroll">
+          <table class="cmp" aria-label="PromptQuery compared with other text-to-SQL approaches">
+            <thead>
+              <tr>
+                <th scope="col" class="cmp-feature">&nbsp;</th>
+                <th scope="col" class="cmp-us">PromptQuery</th>
+                <th scope="col">Vanna</th>
+                <th scope="col">WrenAI</th>
+                <th scope="col">IDE assistants</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Form factor</th>
+                <td class="cmp-us">CLI / pipe-friendly</td>
+                <td>Python library &amp; web</td>
+                <td>GenBI app &amp; UI</td>
+                <td>Editor inline</td>
+              </tr>
+              <tr>
+                <th scope="row">Deterministic by default</th>
+                <td class="cmp-us yes">Yes — temp&nbsp;0<span class="sup">*</span></td>
+                <td class="part">Not by default</td>
+                <td class="part">Not by default</td>
+                <td class="no">No</td>
+              </tr>
+              <tr>
+                <th scope="row">Read-only by construction</th>
+                <td class="cmp-us yes">Two independent layers</td>
+                <td class="part">Depends on setup</td>
+                <td class="part">Governance-gated</td>
+                <td class="no">You run what it writes</td>
+              </tr>
+              <tr>
+                <th scope="row">Built for 100s of tables</th>
+                <td class="cmp-us yes">Retrieval + FK graph</td>
+                <td class="part">RAG, you train it</td>
+                <td class="part">Semantic layer, you author it</td>
+                <td class="part">Whatever's in context</td>
+              </tr>
+              <tr>
+                <th scope="row">Setup before first query</th>
+                <td class="cmp-us yes">None — connect &amp; ask</td>
+                <td class="part">Train on your data</td>
+                <td class="part">Model the semantic layer</td>
+                <td class="yes">None</td>
+              </tr>
+              <tr>
+                <th scope="row">Honest, committed benchmark</th>
+                <td class="cmp-us yes">Failures included</td>
+                <td class="part">Accuracy paper</td>
+                <td class="no">—</td>
+                <td class="no">—</td>
+              </tr>
+              <tr>
+                <th scope="row">Where they're better</th>
+                <td class="cmp-us muted-cell">Not for dashboards or BI</td>
+                <td>Rich RAG, charts, web UI</td>
+                <td>Dashboards, semantic governance</td>
+                <td>In-editor, multi-language</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="cmp-foot"><span class="sup">*</span> Best-effort across model snapshots; reasoning models (GPT-5.x / o-series) sample internally and are the explicit exception.</p>
+      </div>
+    </section>
+
+    <!-- ===== Try it ===== -->
+    <section class="section try" id="try" aria-labelledby="try-title">
+      <div class="wrap">
+        <p class="kicker">Try it</p>
+        <h2 id="try-title">Run it against a real 216-table database — no setup.</h2>
+        <p class="lede">
+          EMBL-EBI publishes RNAcentral as a public, read-only Postgres database. Install PromptQuery,
+          set one API key, and point <code>prq</code> straight at it. Same query that's in the demo, on a
+          real production schema, in under a minute.
+        </p>
+
+        <ol class="try-steps">
+          <li>
+            <span class="try-no">1</span>
+            <div class="try-cmd-wrap">
+              <p class="try-label">Install</p>
+              <div class="install try-install" role="group" aria-label="Install command">
+                <span class="install-prompt" aria-hidden="true">$</span>
+                <code>pip install "promptquery[openai]"</code>
+                <button class="copy-btn" type="button" data-copy='pip install "promptquery[openai]"' aria-label="Copy install command">
+                  <span class="copy-label">Copy</span>
+                </button>
+              </div>
+            </div>
+          </li>
+          <li>
+            <span class="try-no">2</span>
+            <div class="try-cmd-wrap">
+              <p class="try-label">Set one key</p>
+              <div class="install try-install" role="group" aria-label="Set API key">
+                <span class="install-prompt" aria-hidden="true">$</span>
+                <code>export OPENAI_API_KEY=sk-...</code>
+                <button class="copy-btn" type="button" data-copy="export OPENAI_API_KEY=sk-..." aria-label="Copy export command">
+                  <span class="copy-label">Copy</span>
+                </button>
+              </div>
+            </div>
+          </li>
+          <li>
+            <span class="try-no">3</span>
+            <div class="try-cmd-wrap">
+              <p class="try-label">Ask the public RNAcentral DB a question</p>
+              <div class="install try-install try-install-long" role="group" aria-label="Run a query against the public RNAcentral database">
+                <span class="install-prompt" aria-hidden="true">$</span>
+                <code>prq postgresql://reader:NWDMCE5xdipIjRrp@hh-pgsql-public.ebi.ac.uk:5432/pfmegrnargs</code>
+                <button class="copy-btn" type="button" data-copy="prq postgresql://reader:NWDMCE5xdipIjRrp@hh-pgsql-public.ebi.ac.uk:5432/pfmegrnargs" aria-label="Copy connection command">
+                  <span class="copy-label">Copy</span>
+                </button>
+              </div>
+              <p class="try-hint">Then, at the prompt, ask in plain English — e.g. <em>“how many human sequences are there grouped by RNA type”</em>. PromptQuery shows the SQL and waits for your <code>y</code>.</p>
+            </div>
+          </li>
+        </ol>
+
+        <p class="try-foot muted">
+          Public credentials are published by EMBL-EBI for tutorial use. The session is read-only;
+          nothing you do can change it.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===== What it does NOT do ===== -->
+    <section class="section notdo" aria-labelledby="notdo-title">
+      <div class="wrap">
+        <p class="kicker">What it does NOT do (yet)</p>
+        <h2 id="notdo-title">The limits, up front.</h2>
+        <ul class="notdo-list">
+          <li><strong>No writes.</strong> <code>SELECT</code>-only, by design.</li>
+          <li><strong>Postgres only.</strong> MySQL / SQLite are on the roadmap.</li>
+          <li><strong>One database at a time.</strong> No multi-DB sessions.</li>
+          <li><strong>No charts.</strong> Rows out — pipe to <code>csv</code> / <code>jq</code> / your tool.</li>
+          <li><strong>No query history</strong> between sessions yet.</li>
+          <li><strong>No embeddings, no MCP, no local LLM</strong> yet — all on the roadmap.</li>
+        </ul>
+        <p class="notdo-foot">Naming the weaknesses is the point. It's how you know the strong claims are real.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===== Footer ===== -->
+  <footer class="site-footer" id="footer">
+    <div class="wrap footer-inner">
+      <div class="footer-brand">
+        <span class="brand-mark" aria-hidden="true">&gt;_</span>
+        <span class="brand-name">prompt<span class="brand-accent">query</span></span>
+        <p class="footer-tag">Plain English → read-only Postgres SQL.<br />Built for production schemas, not toy demos.</p>
+      </div>
+
+      <nav class="footer-cols" aria-label="Footer">
+        <div class="footer-col">
+          <p class="footer-h">Project</p>
+          <a href="https://github.com/Cyberfilo/promptquery" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://pypi.org/project/promptquery/" target="_blank" rel="noopener">PyPI</a>
+          <a href="https://github.com/Cyberfilo/promptquery#readme" target="_blank" rel="noopener">README</a>
+        </div>
+        <div class="footer-col">
+          <p class="footer-h">On this page</p>
+          <a href="#numbers">Benchmarks</a>
+          <a href="#how">How it works</a>
+          <a href="#safety">Safety</a>
+          <a href="#compare">Compare</a>
+        </div>
+        <div class="footer-col">
+          <p class="footer-h">Install</p>
+          <div class="install footer-install" role="group" aria-label="Install command">
+            <span class="install-prompt" aria-hidden="true">$</span>
+            <code>pip install promptquery</code>
+            <button class="copy-btn" type="button" data-copy="pip install promptquery" aria-label="Copy install command">
+              <span class="copy-label">Copy</span>
+            </button>
+          </div>
+        </div>
+      </nav>
+    </div>
+    <div class="wrap footer-base">
+      <p>Apache-2.0 · v0.2.1 · Python 3.10+ · Postgres-native</p>
+      <p>Built by <a href="https://github.com/Cyberfilo" target="_blank" rel="noopener">Filippo Menghi</a>.</p>
+    </div>
+  </footer>
+
+  <!-- Minimal vanilla JS: copy-to-clipboard for the install commands. -->
+  <script>
+    (function () {
+      var buttons = document.querySelectorAll('.copy-btn');
+      buttons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var text = btn.getAttribute('data-copy');
+          var label = btn.querySelector('.copy-label');
+          var done = function () {
+            btn.classList.add('copied');
+            if (label) label.textContent = 'Copied';
+            setTimeout(function () {
+              btn.classList.remove('copied');
+              if (label) label.textContent = 'Copy';
+            }, 1600);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done).catch(fallback);
+          } else {
+            fallback();
+          }
+          function fallback() {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'absolute';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); done(); } catch (e) {}
+            document.body.removeChild(ta);
+          }
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
