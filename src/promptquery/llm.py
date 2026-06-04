@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 from abc import ABC, abstractmethod
+from urllib import error as urlerror
+from urllib import request
 
 
 class LLMError(RuntimeError):
@@ -86,6 +89,43 @@ class OpenAIClient(LLMClient):
         return response.choices[0].message.content or ""
 
 
+class OllamaClient(LLMClient):
+    name = "ollama"
+
+    def __init__(self, model: str = "llama3", base_url: str | None = None):
+        self.model = model
+        endpoint = base_url or os.environ.get("OLLAMA_BASE_URL") or "http://localhost:11434"
+        self.base_url = endpoint.rstrip("/")
+
+    def generate(self, system: str, user: str) -> str:
+        payload = json.dumps({
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "temperature": 0,
+        }).encode("utf-8")
+        req = request.Request(
+            f"{self.base_url}/v1/chat/completions",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with request.urlopen(req, timeout=120) as response:
+                body = response.read()
+        except urlerror.URLError as e:
+            raise LLMError(f"ollama request failed: {e}") from e
+
+        try:
+            data = json.loads(body.decode("utf-8"))
+            content = data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError, json.JSONDecodeError) as e:
+            raise LLMError("ollama response missing choices[0].message.content") from e
+        return content or ""
+
+
 _SQL_BLOCK_RE = re.compile(r"```(?:sql)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
 
 
@@ -105,14 +145,18 @@ def make_client(model_spec: str | None = None) -> LLMClient:
                 return AnthropicClient(model=provider)
             if provider.startswith("gpt") or provider.startswith("o1") or provider.startswith("o3"):
                 return OpenAIClient(model=provider)
+            if provider == "ollama":
+                return OllamaClient()
             raise LLMError(
                 f"Cannot infer provider from model {provider!r}. "
-                "Use 'anthropic/<model>' or 'openai/<model>'."
+                "Use 'anthropic/<model>', 'openai/<model>', or 'ollama/<model>'."
             )
         if provider == "anthropic":
             return AnthropicClient(model=model)
         if provider == "openai":
             return OpenAIClient(model=model)
+        if provider == "ollama":
+            return OllamaClient(model=model)
         raise LLMError(f"Unknown provider: {provider!r}")
 
     if os.environ.get("ANTHROPIC_API_KEY"):
