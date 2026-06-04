@@ -9,6 +9,11 @@
 
 PromptQuery is an open-source CLI that lets you query Postgres in plain English — engineered for **real production schemas with hundreds of tables**, not toy demos. It introspects your schema, generates SQL, shows it for confirmation, and runs it read-only.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Cyberfilo/promptquery/main/docs/demo.gif" alt="PromptQuery turning a plain-English question into correct SQL against EMBL-EBI's public 216-table RNAcentral database, then showing the result table" width="820">
+</p>
+<p align="center"><sub>Live and unedited, against EMBL-EBI's public <strong>216-table</strong> RNAcentral database. <a href="#try-it-without-setting-up-a-database">Run the exact same connection yourself ↓</a></sub></p>
+
 ```
 $ prq postgresql://prod-db/mycompany
 ✓ 675 tables found (sql: openai/gpt-4o, selector: openai/gpt-4o-mini)
@@ -102,12 +107,12 @@ EMBL-EBI publishes a **public read-only Postgres** with real biological RNA-sequ
 pip install promptquery
 export OPENAI_API_KEY=...
 
-prq --query "show me the 5 latest blog posts with their title" \
-  --selector-model gpt-4o-mini \
+prq --query "for each Rfam clan, show the clan name and how many Rfam models belong to it, top 10" \
+  --selector-model gpt-4o-mini --model gpt-4o --out table \
   postgresql://reader:NWDMCE5xdipIjRrp@hh-pgsql-public.ebi.ac.uk:5432/pfmegrnargs
 ```
 
-(Credentials above are EMBL-EBI's public read-only — published for tutorial use.)
+That's the exact query in the demo above — a real `JOIN` + `GROUP BY` across a 216-table schema you've never seen. (Credentials above are EMBL-EBI's public read-only — published for tutorial use.)
 
 ---
 
