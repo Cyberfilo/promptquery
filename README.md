@@ -10,39 +10,9 @@
 PromptQuery is an open-source CLI that lets you query Postgres in plain English — engineered for **real production schemas with hundreds of tables**, not toy demos. It introspects your schema, generates SQL, shows it for confirmation, and runs it read-only.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Cyberfilo/promptquery/main/docs/demo.gif" alt="PromptQuery turning a plain-English question into correct SQL against EMBL-EBI's public 216-table RNAcentral database, then showing the result table" width="820">
+  <img src="https://raw.githubusercontent.com/Cyberfilo/promptquery/main/docs/demo.gif" alt="PromptQuery turning the plain-English question 'orders over 1000 euros with the customer name and status' into a correct multi-table JOIN — showing the SQL, asking for confirmation, then printing the result rows" width="820">
 </p>
-<p align="center"><sub>Live and unedited, against EMBL-EBI's public <strong>216-table</strong> RNAcentral database. <a href="#try-it-without-setting-up-a-database">Run the exact same connection yourself ↓</a></sub></p>
-
-```
-$ prq postgresql://prod-db/mycompany
-✓ 675 tables found (sql: openai/gpt-4o, selector: openai/gpt-4o-mini)
-
-PromptQuery — ask a question in plain English, or type "exit".
-
-? unpaid invoices over EUR 1000 with the customer name
-Selecting from 50 candidates...
-Generating SQL...
-Using 14 tables: account_move, res_partner, account_payment, ...
-
-  SELECT am.name AS invoice,
-         am.amount_total AS total,
-         p.name AS customer
-  FROM account_move am
-  JOIN res_partner p ON p.id = am.partner_id
-  WHERE am.move_type = 'out_invoice'
-    AND am.payment_state IN ('not_paid', 'partial')
-    AND am.amount_total > 1000
-  ORDER BY am.amount_total DESC;
-
-Run? [y/N] y
-
- invoice       │   total │ customer
-───────────────┼─────────┼──────────────────────
- INV/2026/0042 │ 1899.00 │ Marco Rossi
- INV/2026/0067 │ 1299.00 │ Acme Industries SRL
-2 row(s)
-```
+<p align="center"><sub>Plain English in → the SQL it's about to run → your rows. Read-only, with a confirmation step. Here it even reads <em>"euros"</em> as a currency join across three tables. <a href="#try-it-without-setting-up-a-database">Try it yourself on a live 216-table database, no setup ↓</a></sub></p>
 
 ---
 
