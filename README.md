@@ -20,25 +20,27 @@ PromptQuery is an open-source CLI that lets you query Postgres in plain English 
 
 Two independent production-scale schemas. SQL generation: `gpt-4o`. Table selection: `gpt-4o-mini`.
 
+**What "accuracy" means here:** a question passes only if the generated SQL references *every* table the question needs and *invents none* (parsed with `sqlglot`). These two schemas ship without seeded data, so queries are parsed, not executed — execution-equality is measured separately on the seeded `shop` fixture (see [Benchmark](#benchmark)). Finding the right handful of tables out of hundreds is the hard part, and this measures exactly that. "Tokens / query" is the SQL-generator prompt size, measured with `tiktoken`.
+
 ### Odoo 18 ERP — 675 tables ([`eval/fixtures/odoo.schema.json`](eval/fixtures/odoo.schema.json))
 
 | Pipeline | Accuracy | Tokens / query | Latency |
 |---|---:|---:|---:|
-| Naive (full schema in prompt) | 84.0 % | ~50,000 | 3.4 s |
-| PromptQuery v0.1 *(TF-IDF only)* | 76.0 % | ~2,000 | 2.0 s |
-| **PromptQuery v0.2 *(TF-IDF + LLM selector)*** | **100.0 %** | **~5,000** | 5.6 s |
+| Naive (full schema in prompt) | 84.0 % | ~85,600 | 3.4 s |
+| PromptQuery v0.1 *(TF-IDF only)* | 76.0 % | ~4,500 | 2.0 s |
+| **PromptQuery v0.2 *(TF-IDF + LLM selector)*** | **100.0 %** | **~7,100** | 5.6 s |
 
 ### EMBL-EBI RNAcentral — 216 tables, biology domain, [public read-only DB](https://rnacentral.org/help/public-database)
 
 | Pipeline | Accuracy | Tokens / query | Latency |
 |---|---:|---:|---:|
-| Naive (full schema in prompt) | 82.0 % | ~22,000 | 3.0 s |
-| PromptQuery v0.1 *(TF-IDF only)* | 74.0 % | ~2,000 | 1.9 s |
-| **PromptQuery v0.2 *(TF-IDF + LLM selector)*** | **94.0 %** | **~5,000** | 4.8 s |
+| Naive (full schema in prompt) | 82.0 % | ~28,200 | 3.0 s |
+| PromptQuery v0.1 *(TF-IDF only)* | 74.0 % | ~2,600 | 1.9 s |
+| **PromptQuery v0.2 *(TF-IDF + LLM selector)*** | **94.0 %** | **~1,600** | 4.8 s |
 
-Pattern across both benchmarks: PromptQuery v0.2 wins by **+12 to +16 percentage-points** over the naive "stuff the whole schema into a prompt" baseline, at **~5-10× lower per-query token cost**, validated independently on two different production schemas and domains.
+Pattern across both benchmarks: PromptQuery v0.2 wins by **+12 to +16 percentage-points** over the naive "stuff the whole schema into a prompt" baseline, at **~12–17× lower per-query token cost** (12.1× on Odoo, 17.4× on RNAcentral), validated independently on two different production schemas and domains.
 
-*Receipts in [`eval/results_odoo_v2.json`](eval/results_odoo_v2.json) and [`eval/results_rnacentral.json`](eval/results_rnacentral.json). Reproduce both with one command each — see [Benchmark](#benchmark) below.*
+*Accuracy receipts: [`eval/results_odoo_v2.json`](eval/results_odoo_v2.json), [`eval/results_rnacentral.json`](eval/results_rnacentral.json). Token receipts: [`eval/results_odoo_tokens.json`](eval/results_odoo_tokens.json), [`eval/results_rnacentral_tokens.json`](eval/results_rnacentral_tokens.json) — measured with [`eval/token_bench.py`](eval/token_bench.py). Reproduce everything with one command each — see [Benchmark](#benchmark) below.*
 
 ---
 
@@ -161,6 +163,24 @@ PromptQuery has **two independent layers** so a write is impossible, even if one
 2. **Pre-execution**: every generated query is parsed with `sqlglot` and rejected unless it's a single `SELECT` / `WITH` / `UNION` / `INTERSECT` / `EXCEPT`. The validator also catches CTEs that hide DML (`WITH x AS (DELETE …) SELECT * FROM x`) and dangerous-function calls (`pg_terminate_backend`, `set_config`, `lo_export`, `dblink_exec`).
 
 Every query is also shown to you before it runs. Confirm with `y`.
+
+---
+
+## How it compares
+
+PromptQuery is deliberately narrow. [Vanna](https://github.com/vanna-ai/vanna) and [WrenAI](https://github.com/Canner/WrenAI) are mature, popular, and good at what they do — a trainable chat library and a governed BI layer respectively. PromptQuery isn't trying to be either. It's for engineers who live in `psql` and want one correct, read-only query from the terminal, right now, without setting anything up.
+
+| | **PromptQuery** | Vanna | WrenAI |
+|---|---|---|---|
+| Interface | CLI / REPL | Python library | Web app |
+| Setup | connect & go — live schema introspection | train on your DDL/docs/SQL (vector store) | model a semantic layer (MDL) |
+| Scale approach | FK-graph retrieval over 100s of tables | RAG over example SQL | semantic layer |
+| Determinism | **temperature 0 by default** | model default | model default |
+| Writes | **refused — two read-only layers** | your responsibility | your responsibility |
+| Sweet spot | a correct read-only query from the terminal | embedding NL→SQL in an app | self-serve BI for analysts |
+| License | Apache-2.0 | MIT | Apache-2.0 |
+
+It's also not an IDE assistant (DataGrip AI and friends) — those live in your editor and write freely; PromptQuery lives in your terminal and won't write at all. *Details as of June 2026; corrections welcome via an issue.*
 
 ---
 

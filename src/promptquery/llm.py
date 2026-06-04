@@ -34,6 +34,8 @@ class AnthropicClient(LLMClient):
         response = self._client.messages.create(
             model=self.model,
             max_tokens=2000,
+            # Determinism is a feature: the same question should yield the same SQL.
+            temperature=0,
             system=system,
             messages=[{"role": "user", "content": user}],
         )
@@ -72,9 +74,14 @@ class OpenAIClient(LLMClient):
             ],
         }
         if self.model.startswith(self._REASONING_PREFIXES):
+            # Reasoning models reject `temperature`/`seed`; they sample internally.
             kwargs["max_completion_tokens"] = 4000
         else:
             kwargs["max_tokens"] = 2000
+            # Determinism is a feature: same question -> same SQL. temperature=0
+            # plus a fixed seed gives best-effort reproducibility on chat models.
+            kwargs["temperature"] = 0
+            kwargs["seed"] = 0
         response = self._client.chat.completions.create(**kwargs)
         return response.choices[0].message.content or ""
 

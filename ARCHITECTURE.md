@@ -145,7 +145,7 @@ The most safety-critical file is `tests/test_safety.py`. Cases there encode "thi
 ```
 PromptQuery/
 ├── ARCHITECTURE.md          this file
-├── LICENSE                  MIT
+├── LICENSE                  Apache-2.0
 ├── README.md                user-facing intro and install/usage
 ├── pyproject.toml           hatchling, scripts: promptquery + prq
 ├── src/promptquery/         the package

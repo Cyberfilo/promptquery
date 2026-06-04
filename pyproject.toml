@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "promptquery"
-version = "0.2.1"
+version = "0.2.2"
 description = "Natural-language SQL for production-scale Postgres schemas"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -34,7 +34,7 @@ dependencies = [
 
 [project.optional-dependencies]
 openai = ["openai>=1.0"]
-dev = ["pytest>=8.0", "pytest-mock>=3.0"]
+dev = ["pytest>=8.0", "pytest-mock>=3.0", "tiktoken>=0.7"]
 
 [project.urls]
 Homepage = "https://github.com/Cyberfilo/promptquery"
