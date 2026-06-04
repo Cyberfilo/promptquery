@@ -19,7 +19,8 @@ class LLMClient(ABC):
 class AnthropicClient(LLMClient):
     name = "anthropic"
 
-    def __init__(self, model: str = "claude-sonnet-4-6", api_key: str | None = None):
+    def __init__(self, model: str = "claude-sonnet-4-6", api_key: str | None = None,
+                 temperature: float = 0):
         try:
             import anthropic
         except ImportError as e:
@@ -29,13 +30,13 @@ class AnthropicClient(LLMClient):
             raise LLMError("ANTHROPIC_API_KEY is not set")
         self._client = anthropic.Anthropic(api_key=key)
         self.model = model
+        self.temperature = temperature
 
     def generate(self, system: str, user: str) -> str:
         response = self._client.messages.create(
             model=self.model,
             max_tokens=2000,
-            # Determinism is a feature: the same question should yield the same SQL.
-            temperature=0,
+            temperature=self.temperature,
             system=system,
             messages=[{"role": "user", "content": user}],
         )
@@ -50,7 +51,8 @@ class AnthropicClient(LLMClient):
 class OpenAIClient(LLMClient):
     name = "openai"
 
-    def __init__(self, model: str = "gpt-4o", api_key: str | None = None):
+    def __init__(self, model: str = "gpt-4o", api_key: str | None = None,
+                 temperature: float = 0):
         try:
             import openai
         except ImportError as e:
@@ -60,6 +62,7 @@ class OpenAIClient(LLMClient):
             raise LLMError("OPENAI_API_KEY is not set")
         self._client = openai.OpenAI(api_key=key)
         self.model = model
+        self.temperature = temperature
 
     # Reasoning-class OpenAI models (GPT-5.x, o1, o3, o4) accept
     # `max_completion_tokens` and reject the legacy `max_tokens` parameter.
@@ -78,9 +81,7 @@ class OpenAIClient(LLMClient):
             kwargs["max_completion_tokens"] = 4000
         else:
             kwargs["max_tokens"] = 2000
-            # Determinism is a feature: same question -> same SQL. temperature=0
-            # plus a fixed seed gives best-effort reproducibility on chat models.
-            kwargs["temperature"] = 0
+            kwargs["temperature"] = self.temperature
             kwargs["seed"] = 0
         response = self._client.chat.completions.create(**kwargs)
         return response.choices[0].message.content or ""
@@ -96,29 +97,29 @@ def extract_sql(text: str) -> str:
     return text.strip().rstrip(";").strip()
 
 
-def make_client(model_spec: str | None = None) -> LLMClient:
+def make_client(model_spec: str | None = None, temperature: float = 0) -> LLMClient:
     if model_spec:
         provider, _, model = model_spec.partition("/")
         if not model:
             # No explicit provider — guess from model name
             if provider.startswith("claude"):
-                return AnthropicClient(model=provider)
+                return AnthropicClient(model=provider, temperature=temperature)
             if provider.startswith("gpt") or provider.startswith("o1") or provider.startswith("o3"):
-                return OpenAIClient(model=provider)
+                return OpenAIClient(model=provider, temperature=temperature)
             raise LLMError(
                 f"Cannot infer provider from model {provider!r}. "
                 "Use 'anthropic/<model>' or 'openai/<model>'."
             )
         if provider == "anthropic":
-            return AnthropicClient(model=model)
+            return AnthropicClient(model=model, temperature=temperature)
         if provider == "openai":
-            return OpenAIClient(model=model)
+            return OpenAIClient(model=model, temperature=temperature)
         raise LLMError(f"Unknown provider: {provider!r}")
 
     if os.environ.get("ANTHROPIC_API_KEY"):
-        return AnthropicClient()
+        return AnthropicClient(temperature=temperature)
     if os.environ.get("OPENAI_API_KEY"):
-        return OpenAIClient()
+        return OpenAIClient(temperature=temperature)
     raise LLMError(
         "No LLM API key found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY."
     )

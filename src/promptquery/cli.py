@@ -195,6 +195,13 @@ def run_question(
     help="Maximum tables sent to the LLM after FK expansion.",
 )
 @click.option(
+    "--temperature",
+    default=0.0,
+    show_default=True,
+    type=float,
+    help="Sampling temperature passed to the LLM (0 = deterministic).",
+)
+@click.option(
     "--no-selector",
     is_flag=True,
     help="Disable the LLM table-selector and use TF-IDF + FK expansion only (v0.1 behavior).",
@@ -209,7 +216,7 @@ def run_question(
 def main(dsn: str, model: str | None, selector_model: str | None,
          query: str | None, out_format: str | None,
          top_k: int, select_n: int, max_tables: int,
-         no_selector: bool, yes: bool) -> None:
+         temperature: float, no_selector: bool, yes: bool) -> None:
     """PromptQuery — natural-language SQL for Postgres.
 
     DSN is a libpq connection string, e.g. postgresql://user:pass@host/db.
@@ -234,7 +241,7 @@ def main(dsn: str, model: str | None, selector_model: str | None,
     )
 
     try:
-        llm = make_client(model)
+        llm = make_client(model, temperature=temperature)
     except LLMError as e:
         progress.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
@@ -243,7 +250,7 @@ def main(dsn: str, model: str | None, selector_model: str | None,
         selector_llm = None
     else:
         try:
-            selector_llm = make_client(selector_model) if selector_model else llm
+            selector_llm = make_client(selector_model, temperature=temperature) if selector_model else llm
         except LLMError as e:
             progress.print(f"[red]Selector LLM error:[/red] {e}")
             sys.exit(1)
