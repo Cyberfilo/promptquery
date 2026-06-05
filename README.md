@@ -67,6 +67,7 @@ prq postgresql://localhost/mydb
 prq --query "how many users in Italy" postgresql://localhost/mydb         # JSON to stdout
 prq --query "top 10 orders by total" --out csv postgresql://... > out.csv
 prq --query "..." --out table postgresql://...                            # rich-formatted table
+prq --query "..." --anonymize postgresql://...                             # hide schema names from LLMs
 ```
 
 Exit codes: `0` success · `1` LLM/connection error · `2` safety-guard rejection · `3` execution error.
@@ -150,6 +151,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the deep dive (file inventory, design
 | `--select` | 15 | Tables the LLM selector picks from those candidates |
 | `--max-tables` | 25 | Cap after FK expansion — what the SQL generator actually sees |
 | `--no-selector` | — | Skip the LLM selector (v0.1 behaviour: TF-IDF + FK only) |
+| `--anonymize` | — | Send opaque table/column names to LLMs, then map generated SQL back locally before validation/execution |
 | `-y, --yes` | — | Skip the confirmation prompt before running |
 
 ### Environment
@@ -171,6 +173,10 @@ PromptQuery has **two independent layers** so a write is impossible, even if one
 2. **Pre-execution**: every generated query is parsed with `sqlglot` and rejected unless it's a single `SELECT` / `WITH` / `UNION` / `INTERSECT` / `EXCEPT`. The validator also catches CTEs that hide DML (`WITH x AS (DELETE …) SELECT * FROM x`) and dangerous-function calls (`pg_terminate_backend`, `set_config`, `lo_export`, `dblink_exec`).
 
 Every query is also shown to you before it runs. Confirm with `y`.
+
+### Schema anonymisation
+
+`--anonymize` replaces table and column names with deterministic opaque tokens before schema context is sent to either the table selector or SQL generator. PromptQuery still performs TF-IDF retrieval, FK expansion, SQL de-anonymisation, safety validation, and execution locally against the real schema. Table comments are omitted in anonymised prompts so they do not reintroduce business-specific names.
 
 ---
 
@@ -255,7 +261,7 @@ python3.12 -m venv .venv
 .venv/bin/python -m eval.retrieval
 ```
 
-37 tests, all pure-Python — no live database or API key required for the core suite.
+The core suite is pure Python — no live database or API key required.
 
 ---
 
