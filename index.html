@@ -17,7 +17,9 @@
   <meta property="og:type" content="website" />
   <meta property="og:title" content="PromptQuery — plain English to read-only Postgres SQL" />
   <meta property="og:description" content="Deterministic NL→SQL CLI for production schemas with hundreds of tables. Two safety layers. Honest, committed benchmarks." />
-  <meta property="og:image" content="https://prq.menghi.dev/assets/demo-still.png" />
+  <meta property="og:image" content="https://prq.menghi.dev/assets/og.png" />
+  <meta property="og:image:width" content="1280" />
+  <meta property="og:image:height" content="640" />
   <meta property="og:url" content="https://prq.menghi.dev" />
   <meta property="og:site_name" content="PromptQuery" />
 
@@ -25,10 +27,11 @@
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="PromptQuery — plain English to read-only Postgres SQL" />
   <meta name="twitter:description" content="SQL is engineering, not conversation. Deterministic, read-only, production-scale text-to-SQL for Postgres." />
-  <meta name="twitter:image" content="https://prq.menghi.dev/assets/demo-still.png" />
+  <meta name="twitter:image" content="https://prq.menghi.dev/assets/og.png" />
 
-  <!-- Inline SVG favicon: prq prompt caret in terminal green -->
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d0e14'/%3E%3Cpath d='M8 10l6 6-6 6' fill='none' stroke='%233fb950' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cline x1='17' y1='22' x2='24' y2='22' stroke='%233fb950' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <!-- Inline SVG favicon: prq prompt caret in brand green (#4ee07a) -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d0e14'/%3E%3Cpath d='M8 10l6 6-6 6' fill='none' stroke='%234ee07a' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cline x1='17' y1='22' x2='24' y2='22' stroke='%234ee07a' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <link rel="apple-touch-icon" href="https://prq.menghi.dev/assets/apple-touch-icon.png" />
 
   <!-- Fonts: JetBrains Mono (display/mono) + IBM Plex Sans (body). One preconnect, swap. -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -49,7 +52,7 @@
     "description": "Read-only natural-language to SQL for production-scale Postgres. A deterministic command-line tool built for schemas with hundreds of tables.",
     "url": "https://prq.menghi.dev",
     "downloadUrl": "https://pypi.org/project/promptquery/",
-    "softwareVersion": "0.2.1",
+    "softwareVersion": "0.2.2",
     "license": "https://www.apache.org/licenses/LICENSE-2.0",
     "author": { "@type": "Person", "name": "Filippo Menghi" },
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
@@ -135,7 +138,7 @@
             muted
             loop
             playsinline
-            preload="metadata"
+            preload="none"
             poster="assets/demo-still.png"
             aria-label="PromptQuery CLI converting plain English to read-only Postgres SQL, showing the query for confirmation before running it">
             <source src="assets/demo.mp4" type="video/mp4" />
@@ -500,7 +503,7 @@
       </nav>
     </div>
     <div class="wrap footer-base">
-      <p>Apache-2.0 · v0.2.1 · Python 3.10+ · Postgres-native</p>
+      <p>Apache-2.0 · v0.2.2 · Python 3.10+ · Postgres-native</p>
       <p>Built by <a href="https://github.com/Cyberfilo" target="_blank" rel="noopener">Filippo Menghi</a>.</p>
     </div>
   </footer>
