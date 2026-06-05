@@ -1,13 +1,13 @@
 # PromptQuery
 
-> **Natural-language SQL for production-scale Postgres schemas.**
+> **Natural-language SQL for production-scale Postgres and SQLite schemas.**
 
 [![PyPI](https://img.shields.io/pypi/v/promptquery.svg)](https://pypi.org/project/promptquery/)
 [![CI](https://github.com/Cyberfilo/promptquery/actions/workflows/ci.yml/badge.svg)](https://github.com/Cyberfilo/promptquery/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python: 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
-PromptQuery is an open-source CLI that lets you query Postgres in plain English — engineered for **real production schemas with hundreds of tables**, not toy demos. It introspects your schema, generates SQL, shows it for confirmation, and runs it read-only.
+PromptQuery is an open-source CLI that lets you query Postgres and SQLite in plain English — engineered for **real production schemas with hundreds of tables**, not toy demos. It introspects your schema, generates SQL, shows it for confirmation, and runs it read-only.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Cyberfilo/promptquery/main/docs/demo.gif" alt="PromptQuery turning the plain-English question 'orders over 1000 euros with the customer name and status' into a correct multi-table JOIN — showing the SQL, asking for confirmation, then printing the result rows" width="820">
@@ -55,6 +55,7 @@ export ANTHROPIC_API_KEY=...
 
 # Connect and start asking:
 prq postgresql://localhost/mydb
+prq sqlite:///local.db
 ```
 
 `prq` and `pquery` are short aliases for `promptquery`. All three commands work identically.
@@ -67,6 +68,7 @@ prq postgresql://localhost/mydb
 prq --query "how many users in Italy" postgresql://localhost/mydb         # JSON to stdout
 prq --query "top 10 orders by total" --out csv postgresql://... > out.csv
 prq --query "..." --out table postgresql://...                            # rich-formatted table
+prq --query "top customers by spend" sqlite:///local.db                    # SQLite local file
 ```
 
 Exit codes: `0` success · `1` LLM/connection error · `2` safety-guard rejection · `3` execution error.
@@ -133,7 +135,7 @@ question
 └────────┬──────────┘
          │
          ▼
-   "Run? [y/N]" → execute against a read-only Postgres session
+   "Run? [y/N]" → execute against a read-only database session
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the deep dive (file inventory, design bets, the patent-landmine non-goals).
@@ -167,8 +169,8 @@ If both are set, Anthropic is preferred. Override either with `--model anthropic
 
 PromptQuery has **two independent layers** so a write is impossible, even if one layer fails:
 
-1. **Session-level**: every Postgres session opens with `default_transaction_read_only = on` and a 60-second `statement_timeout`. The database itself refuses non-SELECT operations.
-2. **Pre-execution**: every generated query is parsed with `sqlglot` and rejected unless it's a single `SELECT` / `WITH` / `UNION` / `INTERSECT` / `EXCEPT`. The validator also catches CTEs that hide DML (`WITH x AS (DELETE …) SELECT * FROM x`) and dangerous-function calls (`pg_terminate_backend`, `set_config`, `lo_export`, `dblink_exec`).
+1. **Session-level**: every Postgres session opens with `default_transaction_read_only = on` and a 60-second `statement_timeout`; SQLite files open with `mode=ro` and enable `PRAGMA query_only = ON`. The database itself refuses non-SELECT operations.
+2. **Pre-execution**: every generated query is parsed with `sqlglot` in the selected database dialect and rejected unless it's a single `SELECT` / `WITH` / `UNION` / `INTERSECT` / `EXCEPT`. The validator also catches CTEs that hide DML (`WITH x AS (DELETE …) SELECT * FROM x`) and dangerous-function calls (`pg_terminate_backend`, `set_config`, `lo_export`, `dblink_exec`, `load_extension`).
 
 Every query is also shown to you before it runs. Confirm with `y`.
 
@@ -226,7 +228,7 @@ See [`eval/END_TO_END.md`](eval/END_TO_END.md) for the harness internals.
 ## What PromptQuery does NOT do (yet)
 
 - **No writes.** `SELECT` only, by design and by belt-and-suspenders.
-- **Postgres only.** MySQL and SQLite are on the v0.4 roadmap.
+- **Full multi-dialect coverage.** Postgres remains the reference implementation and SQLite local files are supported; MySQL is still on the roadmap.
 - **One database at a time.** No multi-DB sessions.
 - **No data visualisation.** Rows out, that's it. Pipe to `csv` / `jq` / your tool of choice.
 
@@ -236,7 +238,7 @@ See [`eval/END_TO_END.md`](eval/END_TO_END.md) for the harness internals.
 
 - **v0.2 (shipped)** — LLM-assisted table selector, stemmed TF-IDF.
 - **v0.3** — local LLMs (Ollama), schema anonymisation (GDPR-by-default), query-history-as-few-shot.
-- **v0.4** — MySQL + SQLite adapters, MCP server mode, public competitor benchmark.
+- **v0.4** — MySQL adapter, MCP server mode, public competitor benchmark.
 
 ---
 
@@ -255,7 +257,7 @@ python3.12 -m venv .venv
 .venv/bin/python -m eval.retrieval
 ```
 
-37 tests, all pure-Python — no live database or API key required for the core suite.
+55 tests, all pure-Python — no live database or API key required for the core suite.
 
 ---
 

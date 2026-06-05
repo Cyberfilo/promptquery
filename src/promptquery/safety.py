@@ -40,16 +40,17 @@ _DANGEROUS_FUNCTIONS = {
     "lo_export",
     "dblink_exec",
     "set_config",
+    "load_extension",
 }
 
 
-def validate_select_only(sql: str) -> None:
+def validate_select_only(sql: str, *, dialect: str = "postgres") -> None:
     sql = (sql or "").strip()
     if not sql:
         raise UnsafeQuery("empty SQL")
 
     try:
-        statements = sqlglot.parse(sql, read="postgres")
+        statements = sqlglot.parse(sql, read=dialect)
     except Exception as e:
         raise UnsafeQuery(f"could not parse SQL: {e}") from e
 

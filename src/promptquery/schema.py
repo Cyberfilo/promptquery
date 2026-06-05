@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .db import Database
+    from .db import Database, SQLiteDatabase
 
 
 @dataclass(frozen=True)
@@ -67,7 +67,7 @@ class Table:
 
     @property
     def qualified_name(self) -> str:
-        if self.schema == "public":
+        if self.schema in {"public", "main"}:
             return self.name
         return f"{self.schema}.{self.name}"
 
@@ -166,7 +166,13 @@ ORDER BY ns.nspname, cls.relname, con.conname, k.ord
 """
 
 
-def introspect(db: "Database") -> Schema:
+def introspect(db: "Database | SQLiteDatabase") -> Schema:
+    if getattr(db, "dialect", "postgres") == "sqlite":
+        return _introspect_sqlite(db)
+    return _introspect_postgres(db)
+
+
+def _introspect_postgres(db: "Database") -> Schema:
     tables_rows = db.fetch_dicts(INTROSPECT_TABLES)
     columns_rows = db.fetch_dicts(INTROSPECT_COLUMNS)
     fks_rows = db.fetch_dicts(INTROSPECT_FKS)
@@ -203,5 +209,50 @@ def introspect(db: "Database") -> Schema:
             referenced_table=row["referenced_table"],
             referenced_column=row["referenced_column"],
         ))
+
+    return Schema(tables=list(tables.values()))
+
+
+def _introspect_sqlite(db: "SQLiteDatabase") -> Schema:
+    tables_rows = db.fetch_dicts("""
+        SELECT 'main' AS schema,
+               name,
+               NULL AS comment,
+               type
+        FROM sqlite_schema
+        WHERE type IN ('table', 'view')
+          AND name NOT LIKE 'sqlite_%'
+        ORDER BY name
+    """)
+
+    tables: dict[tuple[str, str], Table] = {}
+    for row in tables_rows:
+        key = (row["schema"], row["name"])
+        tables[key] = Table(
+            schema=row["schema"],
+            name=row["name"],
+            comment=row["comment"],
+        )
+
+    for table in tables.values():
+        for row in db.pragma_dicts("table_xinfo", table.name):
+            if row["hidden"] == 1:
+                continue
+            table.columns.append(Column(
+                name=row["name"],
+                data_type=row["type"] or "UNKNOWN",
+                nullable=not bool(row["notnull"]) and not bool(row["pk"]),
+                is_primary_key=bool(row["pk"]),
+            ))
+
+    for table in tables.values():
+        fks_rows = db.pragma_dicts("foreign_key_list", table.name)
+        for row in sorted(fks_rows, key=lambda r: (r["id"], r["seq"])):
+            table.foreign_keys.append(ForeignKey(
+                column=row["from"],
+                referenced_schema="main",
+                referenced_table=row["table"],
+                referenced_column=row["to"],
+            ))
 
     return Schema(tables=list(tables.values()))

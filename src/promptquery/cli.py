@@ -14,7 +14,7 @@ from prompt_toolkit.history import InMemoryHistory
 from rich.console import Console
 
 from . import __version__
-from .db import Database
+from .db import Database, SQLiteDatabase, make_database
 from .llm import LLMClient, LLMError, extract_sql, make_client
 from .prompts import build_system_prompt
 from .render import render_results, render_sql
@@ -81,7 +81,7 @@ def run_question(
     retriever: TfIdfRetriever,
     llm: LLMClient,
     selector_llm: LLMClient | None,
-    db: Database,
+    db: Database | SQLiteDatabase,
     *,
     top_k: int,
     select_n: int,
@@ -125,7 +125,7 @@ def run_question(
         return QueryResult(Outcome.EMPTY_SQL, None, [], [], "LLM returned an empty response.")
 
     try:
-        validate_select_only(sql)
+        validate_select_only(sql, dialect=getattr(db, "dialect", "postgres"))
     except UnsafeQuery as e:
         return QueryResult(Outcome.UNSAFE, sql, [], [], str(e))
 
@@ -210,14 +210,15 @@ def main(dsn: str, model: str | None, selector_model: str | None,
          query: str | None, out_format: str | None,
          top_k: int, select_n: int, max_tables: int,
          no_selector: bool, yes: bool) -> None:
-    """PromptQuery — natural-language SQL for Postgres.
+    """PromptQuery — natural-language SQL for Postgres and SQLite.
 
-    DSN is a libpq connection string, e.g. postgresql://user:pass@host/db.
+    DSN is a libpq connection string or sqlite:///path/to.db.
 
     Examples:
 
       Interactive REPL:
         promptquery postgresql://localhost/mydb
+        promptquery sqlite:///local.db
 
       One-shot query (machine-friendly JSON to stdout, progress to stderr):
         promptquery -q "how many users in Italy" postgresql://localhost/mydb
@@ -250,7 +251,7 @@ def main(dsn: str, model: str | None, selector_model: str | None,
 
     progress.print(f"[dim]Connecting to[/dim] {_redact(dsn)} [dim]...[/dim]")
     try:
-        db_ctx = Database(dsn).__enter__()
+        db_ctx = make_database(dsn).__enter__()
     except Exception as e:
         progress.print(f"[red]Connection failed:[/red] {e}")
         sys.exit(1)
@@ -267,7 +268,8 @@ def main(dsn: str, model: str | None, selector_model: str | None,
             else (" (selector: same)" if selector_llm is not None else " (selector: off)")
         )
         progress.print(f"[green]✓[/green] {len(schema.tables)} tables found "
-                       f"[dim](sql: {llm.name}/{llm.model}{selector_info})[/dim]")
+                       f"[dim](db: {db_ctx.dialect}, sql: "
+                       f"{llm.name}/{llm.model}{selector_info})[/dim]")
 
         retriever = TfIdfRetriever(schema)
 

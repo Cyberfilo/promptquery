@@ -42,7 +42,7 @@ question
          │
          ▼
 ┌──────────────────┐
-│ safety.py        │  Parse with sqlglot in Postgres dialect. Reject anything
+│ safety.py        │  Parse with sqlglot in the database dialect. Reject anything
 │ validate_select  │  that is not a single SELECT / WITH / UNION /
 │ _only            │  INTERSECT / EXCEPT. Reject CTEs that hide DML
 │                  │  (WITH x AS (DELETE ... RETURNING ...) SELECT ...).
@@ -61,10 +61,10 @@ question
          │
          ▼
 ┌──────────────────┐
-│ db.py            │  Execute. The Postgres session was opened with
-│ Database.execute │  default_transaction_read_only = on and a 60s
-│                  │  statement_timeout, so even if safety.py failed
-│                  │  the database itself would refuse a write.
+│ db.py            │  Execute. Postgres sessions use
+│ Database.execute │  default_transaction_read_only = on; SQLite files open
+│                  │  mode=ro and use PRAGMA query_only = ON, so even if
+│                  │  safety.py failed the database itself refuses writes.
 └────────┬─────────┘
          │
          ▼
@@ -81,8 +81,8 @@ question
 | `__init__.py`     | Package version.                                                          |
 | `__main__.py`     | `python -m promptquery` entry point.                                      |
 | `cli.py`          | Click command and prompt-toolkit REPL. Orchestrates the whole pipeline.   |
-| `db.py`           | psycopg3 connection wrapper. Sets the read-only session.                  |
-| `schema.py`       | Dataclasses + the `pg_catalog` queries that introspect them.              |
+| `db.py`           | Postgres and SQLite connection wrappers. Sets the read-only session.      |
+| `schema.py`       | Dataclasses + database-specific introspection adapters.                   |
 | `retrieval.py`    | Tokenizer, TF-IDF ranker, FK-graph expander.                              |
 | `llm.py`          | Provider clients (Anthropic, OpenAI), SQL extractor, provider factory.    |
 | `prompts.py`      | System prompt template and schema-to-prompt formatter.                    |
@@ -95,7 +95,7 @@ question
 - **`schema.py` ↔ `prompts.py`** — `format_schema` walks the same dataclasses. Schema additions usually need a prompt update.
 - **`cli.py` ↔ everything else** — the only file that knows the full pipeline. New stages (query history, post-execution feedback) wire in here.
 - **`safety.py` ↔ `llm.py`** — `extract_sql` runs first; `validate_select_only` runs second. Together they handle the case where the model returns malformed output.
-- **`db.py` ↔ `safety.py`** — two layers, intentionally redundant. Either alone is insufficient; both together make a write impossible.
+- **`db.py` ↔ `safety.py`** — two layers, intentionally redundant. Either alone is insufficient; together they keep execution read-only at both the SQL-parser and database-session layers.
 
 ## Design bets
 
@@ -109,7 +109,7 @@ Many natural-language questions reference one core entity but require joins thro
 
 ### Why two safety layers
 
-`safety.py` is the primary guard. It parses every statement and rejects anything other than a SELECT. The Postgres session-level `default_transaction_read_only = on` is the fallback: if a malicious prompt somehow produces SQL that the validator misclassifies (a parser bug, an unknown construct), Postgres itself refuses the write.
+`safety.py` is the primary guard. It parses every statement in the selected database dialect and rejects anything other than a SELECT. The session-level read-only mode is the fallback: Postgres uses `default_transaction_read_only = on`, while SQLite files open with `mode=ro` and use `PRAGMA query_only = ON`. If a malicious prompt somehow produces SQL that the validator misclassifies (a parser bug, an unknown construct), the database itself refuses the write.
 
 This redundancy is not paranoia. AI-generated SQL is, by construction, less predictable than human-written SQL. The cost of one accidental `DELETE` is high enough that doubling up is the only sensible default.
 
@@ -121,7 +121,7 @@ This redundancy is not paranoia. AI-generated SQL is, by construction, less pred
 
 These are intentionally out of scope for the MVP. They are tracked in the [roadmap](README.md#roadmap).
 
-- MySQL / SQLite support — needs an adapter abstraction first.
+- MySQL support — needs an adapter implementation and optional driver decision.
 - Multi-database sessions in one REPL.
 - Data visualization (charts, plots).
 - Query-history persistence between sessions.
@@ -136,7 +136,7 @@ Run the test suite:
 pytest
 ```
 
-All tests in v0.1 are pure Python — no live database required. The integration test harness (docker-compose + a real Postgres) is queued for v0.2 alongside the public benchmark suite against Spider / BIRD.
+All core tests are pure Python — no live external database required. SQLite adapter tests use temporary local database files. The integration test harness (docker-compose + a real Postgres) is queued for v0.2 alongside the public benchmark suite against Spider / BIRD.
 
 The most safety-critical file is `tests/test_safety.py`. Cases there encode "things the validator MUST reject." Add cases when you discover new attack vectors; do not delete cases during refactors.
 
@@ -160,6 +160,7 @@ PromptQuery/
 │   ├── safety.py
 │   └── render.py
 └── tests/                   pytest suite
+    ├── test_schema_adapters.py
     ├── test_safety.py
     └── test_retrieval.py
 ```

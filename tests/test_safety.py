@@ -56,3 +56,17 @@ def test_rejects_cte_with_dml():
         validate_select_only(
             "WITH deleted AS (DELETE FROM users RETURNING id) SELECT * FROM deleted"
         )
+
+
+def test_accepts_sqlite_dialect_queries():
+    validate_select_only(
+        'SELECT json_extract(payload, "$.city") FROM events LIMIT 10',
+        dialect="sqlite",
+    )
+
+
+def test_sqlite_dialect_still_rejects_mutating_statements():
+    with pytest.raises(UnsafeQuery):
+        validate_select_only("ATTACH DATABASE 'other.db' AS other", dialect="sqlite")
+    with pytest.raises(UnsafeQuery):
+        validate_select_only("SELECT load_extension('mod_spatialite')", dialect="sqlite")
