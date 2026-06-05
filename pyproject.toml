@@ -10,18 +10,25 @@ readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.10"
 authors = [{ name = "PromptQuery contributors" }]
-keywords = ["postgres", "sql", "llm", "cli", "nl2sql", "anthropic", "openai"]
+keywords = [
+    "text-to-sql", "natural-language-to-sql", "nl2sql", "postgres", "postgresql",
+    "sql", "database", "read-only", "llm", "cli", "sqlglot", "openai", "anthropic",
+    "data-engineering",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
     "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Database",
     "Topic :: Database :: Front-Ends",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
     "psycopg[binary]>=3.1",
@@ -40,6 +47,7 @@ dev = ["pytest>=8.0", "pytest-mock>=3.0", "tiktoken>=0.7", "ruff>=0.6"]
 Homepage = "https://github.com/Cyberfilo/promptquery"
 Repository = "https://github.com/Cyberfilo/promptquery"
 Issues = "https://github.com/Cyberfilo/promptquery/issues"
+Changelog = "https://github.com/Cyberfilo/promptquery/blob/main/CHANGELOG.md"
 
 [project.scripts]
 promptquery = "promptquery.cli:main"
