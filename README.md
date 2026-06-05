@@ -86,6 +86,14 @@ prq --query "for each Rfam clan, show the clan name and how many Rfam models bel
 
 That's the exact query in the demo above — a real `JOIN` + `GROUP BY` across a 216-table schema you've never seen. (Credentials above are EMBL-EBI's public read-only — published for tutorial use.)
 
+**More to try** — swap the `--query` string for any of these. Same database, no schema knowledge required, each a different query shape — and each one verified to return real rows:
+
+```text
+which 10 source databases contribute the most RNA sequences          # GROUP BY over millions of rows (ENA, SILVA, Rfam …)
+how many Rfam families are there in total                            # a one-number COUNT
+list the 10 Rfam families with the longest consensus sequences, with their length
+```
+
 ---
 
 ## How it works
