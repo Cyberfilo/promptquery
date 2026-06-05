@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import random
 
-from promptquery.schema import Column, ForeignKey, Schema, Table
+from promptquery.schema import Column, Schema, Table
 
 
 # Realistic-sounding prefixes/suffixes for plausible-looking noise tables.

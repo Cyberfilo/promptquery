@@ -34,7 +34,7 @@ dependencies = [
 
 [project.optional-dependencies]
 openai = ["openai>=1.0"]
-dev = ["pytest>=8.0", "pytest-mock>=3.0", "tiktoken>=0.7"]
+dev = ["pytest>=8.0", "pytest-mock>=3.0", "tiktoken>=0.7", "ruff>=0.6"]
 
 [project.urls]
 Homepage = "https://github.com/Cyberfilo/promptquery"
@@ -52,3 +52,15 @@ packages = ["src/promptquery"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# Ruff's default-ish ruleset (pyflakes + a curated pycodestyle subset). Keeps the
+# lint gate meaningful without churn; widen as the project grows.
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["E702"]  # compact one-line stubs are fine in tests

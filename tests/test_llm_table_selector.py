@@ -1,5 +1,5 @@
 from promptquery.retrieval import llm_select_tables
-from promptquery.schema import Column, ForeignKey, Schema, Table
+from promptquery.schema import Column, Table
 
 
 class _FakeLLM:

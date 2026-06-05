@@ -14,7 +14,6 @@ import pytest
 from promptquery.cli import (
     OutputFormat,
     Outcome,
-    QueryResult,
     format_rows,
     main,
     run_question,

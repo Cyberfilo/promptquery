@@ -254,7 +254,8 @@ def render(console: Console, per_q: list[tuple],
             v1_pass += 1
         if p2.passed:
             v2_pass += 1
-        mark = lambda o: "[green]✓[/green]" if o.passed else "[red]✗[/red]"
+        def mark(o):
+            return "[green]✓[/green]" if o.passed else "[red]✗[/red]"
         table.add_row(str(i), q.text, mark(n), mark(p1), mark(p2), p1.reason, p2.reason)
     console.print(table)
 
@@ -270,9 +271,10 @@ def render(console: Console, per_q: list[tuple],
         f"{v1_pass}/{total}  ({100*v1_pass/max(total,1):.1f}%)",
         f"{v2_pass}/{total}  ({100*v2_pass/max(total,1):.1f}%)",
     )
-    fmt_delta = lambda d: ("[green]+" if d > 0 else ("[red]" if d < 0 else "")) + \
-                          f"{d:+d}q ({100*d/max(total,1):+.1f}pp)" + \
-                          ("[/green]" if d > 0 else ("[/red]" if d < 0 else ""))
+    def fmt_delta(d):
+        return ("[green]+" if d > 0 else ("[red]" if d < 0 else "")) + \
+                              f"{d:+d}q ({100*d/max(total,1):+.1f}pp)" + \
+                              ("[/green]" if d > 0 else ("[/red]" if d < 0 else ""))
     summary.add_row("vs Naive (delta)", "0", fmt_delta(v1_pass - naive_pass),
                     fmt_delta(v2_pass - naive_pass))
     summary.add_row(

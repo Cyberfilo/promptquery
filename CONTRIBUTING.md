@@ -37,3 +37,10 @@ label. A few well-scoped ones from the roadmap:
 
 Run `pytest` first. Keep PRs small and focused, and say what changed and why. If it changes behaviour,
 update the README in the same PR.
+
+## Branching & releases
+- **`main`** is protected: CI (lint + tests + build) must pass and changes land via PR; no
+  force-pushes or deletions. Releases are tagged from `main` (a `v*` tag triggers the PyPI publish).
+- **`staging`** is the integration branch. Branch features off `staging`, PR into `staging` (CI runs
+  on both `main` and `staging`), then promote `staging` → `main` via PR for a release.
+- Quick flow: `git switch staging && git pull && git switch -c my-feature` → push → PR to `staging`.
