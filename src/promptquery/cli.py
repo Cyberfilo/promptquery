@@ -14,6 +14,7 @@ from prompt_toolkit.history import InMemoryHistory
 from rich.console import Console
 
 from . import __version__
+from .anonymize import SchemaAnonymizer
 from .db import Database
 from .llm import LLMClient, LLMError, extract_sql, make_client
 from .prompts import build_system_prompt
@@ -89,6 +90,7 @@ def run_question(
     confirm: bool,
     progress: Console | None = None,
     prompt_for_confirm=None,
+    anonymizer: SchemaAnonymizer | None = None,
 ) -> QueryResult:
     """Run a single NL question end-to-end. Used by both the REPL and --query mode."""
     ranked = retriever.rank(question, top_k=top_k)
@@ -98,7 +100,17 @@ def run_question(
         if progress:
             progress.print(f"[dim]Selecting from {len(candidates)} candidates...[/dim]")
         try:
-            selected = llm_select_tables(question, candidates, selector_llm, max_select=select_n)
+            if anonymizer is None:
+                selected = llm_select_tables(question, candidates, selector_llm, max_select=select_n)
+            else:
+                anonymized_candidates = anonymizer.anonymize_tables(candidates)
+                selected_anonymized = llm_select_tables(
+                    question,
+                    anonymized_candidates,
+                    selector_llm,
+                    max_select=select_n,
+                )
+                selected = anonymizer.real_tables_from_anonymized(selected_anonymized)
             if selected:
                 candidates = selected
         except Exception as e:
@@ -111,7 +123,8 @@ def run_question(
         suffix = "..." if len(relevant) > 5 else ""
         progress.print(f"[dim]Using {len(relevant)} tables: {preview}{suffix}[/dim]")
 
-    system_prompt = build_system_prompt(relevant)
+    prompt_tables = anonymizer.anonymize_tables(relevant) if anonymizer else relevant
+    system_prompt = build_system_prompt(prompt_tables)
 
     try:
         if progress:
@@ -123,6 +136,8 @@ def run_question(
     sql = extract_sql(raw)
     if not sql:
         return QueryResult(Outcome.EMPTY_SQL, None, [], [], "LLM returned an empty response.")
+    if anonymizer is not None:
+        sql = anonymizer.deanonymize_sql(sql)
 
     try:
         validate_select_only(sql)
@@ -200,6 +215,11 @@ def run_question(
     help="Disable the LLM table-selector and use TF-IDF + FK expansion only (v0.1 behavior).",
 )
 @click.option(
+    "--anonymize",
+    is_flag=True,
+    help="Send opaque table/column names to LLMs, then map generated SQL back locally.",
+)
+@click.option(
     "-y",
     "--yes",
     is_flag=True,
@@ -209,7 +229,7 @@ def run_question(
 def main(dsn: str, model: str | None, selector_model: str | None,
          query: str | None, out_format: str | None,
          top_k: int, select_n: int, max_tables: int,
-         no_selector: bool, yes: bool) -> None:
+         no_selector: bool, anonymize: bool, yes: bool) -> None:
     """PromptQuery — natural-language SQL for Postgres.
 
     DSN is a libpq connection string, e.g. postgresql://user:pass@host/db.
@@ -266,8 +286,11 @@ def main(dsn: str, model: str | None, selector_model: str | None,
             if selector_llm is not None and selector_llm is not llm
             else (" (selector: same)" if selector_llm is not None else " (selector: off)")
         )
+        anonymizer = SchemaAnonymizer(schema) if anonymize else None
+        anonymize_info = ", anonymize: on" if anonymizer is not None else ""
         progress.print(f"[green]✓[/green] {len(schema.tables)} tables found "
-                       f"[dim](sql: {llm.name}/{llm.model}{selector_info})[/dim]")
+                       f"[dim](sql: {llm.name}/{llm.model}{selector_info}"
+                       f"{anonymize_info})[/dim]")
 
         retriever = TfIdfRetriever(schema)
 
@@ -276,14 +299,14 @@ def main(dsn: str, model: str | None, selector_model: str | None,
                 question=query, schema=schema, retriever=retriever,
                 llm=llm, selector_llm=selector_llm, db=db_ctx,
                 top_k=top_k, select_n=select_n, max_tables=max_tables,
-                out_fmt=out_fmt, progress=progress,
+                out_fmt=out_fmt, progress=progress, anonymizer=anonymizer,
             ))
 
         _run_repl(
             schema=schema, retriever=retriever,
             llm=llm, selector_llm=selector_llm, db=db_ctx,
             top_k=top_k, select_n=select_n, max_tables=max_tables,
-            out_fmt=out_fmt, yes=yes, progress=progress,
+            out_fmt=out_fmt, yes=yes, progress=progress, anonymizer=anonymizer,
         )
     finally:
         db_ctx.close()
@@ -291,12 +314,13 @@ def main(dsn: str, model: str | None, selector_model: str | None,
 
 def _run_one_shot(*, question, schema, retriever, llm, selector_llm, db,
                   top_k, select_n, max_tables, out_fmt: OutputFormat,
-                  progress: Console) -> int:
+                  progress: Console,
+                  anonymizer: SchemaAnonymizer | None = None) -> int:
     result = run_question(
         question=question, schema=schema, retriever=retriever,
         llm=llm, selector_llm=selector_llm, db=db,
         top_k=top_k, select_n=select_n, max_tables=max_tables,
-        confirm=False, progress=progress,
+        confirm=False, progress=progress, anonymizer=anonymizer,
     )
 
     if result.outcome is Outcome.LLM_ERROR:
@@ -326,7 +350,8 @@ def _run_one_shot(*, question, schema, retriever, llm, selector_llm, db,
 
 def _run_repl(*, schema, retriever, llm, selector_llm, db,
               top_k, select_n, max_tables, out_fmt: OutputFormat,
-              yes: bool, progress: Console) -> None:
+              yes: bool, progress: Console,
+              anonymizer: SchemaAnonymizer | None = None) -> None:
     session: PromptSession[str] = PromptSession(history=InMemoryHistory())
     progress.print(
         "\n[bold]PromptQuery[/bold] — ask a question in plain English, "
@@ -350,6 +375,7 @@ def _run_repl(*, schema, retriever, llm, selector_llm, db,
             top_k=top_k, select_n=select_n, max_tables=max_tables,
             confirm=not yes, progress=progress,
             prompt_for_confirm=(lambda: session.prompt("Run? [y/N] ")) if not yes else None,
+            anonymizer=anonymizer,
         )
 
         if result.outcome is Outcome.LLM_ERROR:

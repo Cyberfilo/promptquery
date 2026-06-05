@@ -11,6 +11,7 @@ import json
 
 import pytest
 
+from promptquery.anonymize import SchemaAnonymizer
 from promptquery.cli import (
     OutputFormat,
     Outcome,
@@ -100,8 +101,10 @@ class _FakeLLM:
 
     def __init__(self, response: str):
         self._response = response
+        self.calls: list[tuple[str, str]] = []
 
     def generate(self, system: str, user: str) -> str:
+        self.calls.append((system, user))
         return self._response
 
 
@@ -201,6 +204,57 @@ def test_run_question_exec_error_propagates_as_outcome():
     assert "relation users" in (result.error or "")
 
 
+def test_run_question_anonymizes_prompt_and_maps_sql_back():
+    schema = _example_schema()
+    retriever = TfIdfRetriever(schema)
+    anonymizer = SchemaAnonymizer(schema)
+    llm = _FakeLLM("```sql\nSELECT table_001.column_001 FROM table_001\n```")
+    db = _FakeDB(rows=[(1,)])
+
+    result = run_question(
+        question="show user ids",
+        schema=schema, retriever=retriever,
+        llm=llm, selector_llm=None, db=db,
+        top_k=10, select_n=15, max_tables=10,
+        confirm=False, anonymizer=anonymizer,
+    )
+
+    assert result.outcome is Outcome.OK
+    assert db.last_sql == "SELECT users.id FROM users"
+
+    system_prompt = llm.calls[0][0]
+    assert "TABLE table_001" in system_prompt
+    assert "column_001" in system_prompt
+    for leaked in ["users", "orders", "email", "user_id", "end-user"]:
+        assert leaked not in system_prompt
+
+
+def test_run_question_anonymizes_selector_candidates():
+    schema = _example_schema()
+    retriever = TfIdfRetriever(schema)
+    anonymizer = SchemaAnonymizer(schema)
+    selector_llm = _FakeLLM('["table_002"]')
+    llm = _FakeLLM("```sql\nSELECT table_002.column_003 FROM table_002\n```")
+    db = _FakeDB(rows=[(42,)])
+
+    result = run_question(
+        question="anything",
+        schema=schema, retriever=retriever,
+        llm=llm, selector_llm=selector_llm, db=db,
+        top_k=10, select_n=1, max_tables=10,
+        confirm=False, anonymizer=anonymizer,
+    )
+
+    assert result.outcome is Outcome.OK
+    assert db.last_sql == "SELECT orders.total FROM orders"
+
+    selector_prompt = selector_llm.calls[0][0]
+    assert "table_001" in selector_prompt
+    assert "table_002" in selector_prompt
+    for leaked in ["users", "orders", "email", "user_id", "end-user"]:
+        assert leaked not in selector_prompt
+
+
 # -- CLI surface (just argv parsing — no real DB / LLM call) --------------
 
 def test_cli_help_lists_query_flag():
@@ -211,6 +265,7 @@ def test_cli_help_lists_query_flag():
     assert result.exit_code == 0
     assert "--query" in result.output
     assert "--out" in result.output
+    assert "--anonymize" in result.output
     assert "json" in result.output and "csv" in result.output
 
 
