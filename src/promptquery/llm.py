@@ -78,6 +78,7 @@ class OpenAIClient(LLMClient):
         }
         if self.model.startswith(self._REASONING_PREFIXES):
             # Reasoning models reject `temperature`/`seed`; they sample internally.
+            # self.temperature is intentionally not forwarded here.
             kwargs["max_completion_tokens"] = 4000
         else:
             kwargs["max_tokens"] = 2000

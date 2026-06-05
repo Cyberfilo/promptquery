@@ -198,8 +198,8 @@ def run_question(
     "--temperature",
     default=0.0,
     show_default=True,
-    type=float,
-    help="Sampling temperature passed to the LLM (0 = deterministic).",
+    type=click.FloatRange(0.0, 2.0),
+    help="Sampling temperature passed to the LLM (0 = deterministic, max 2.0).",
 )
 @click.option(
     "--no-selector",
