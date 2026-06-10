@@ -26,7 +26,8 @@ question
          ▼
 ┌──────────────────┐
 │ prompts.py       │  Render the chosen tables into the system prompt:
-│ format_schema    │  TABLE name, columns with PK/NOT NULL flags, FKs.
+│ format_schema    │  TABLE name, columns with PK/NOT NULL flags, column
+│                  │  comments, the legal values of every enum column, FKs.
 └────────┬─────────┘
          │
          ▼
@@ -66,7 +67,12 @@ question
 │                  │  statement_timeout, so even if safety.py failed
 │                  │  the database itself would refuse a write.
 └────────┬─────────┘
-         │
+         │ on a database error: repair.py feeds the failed SQL plus the
+         │ database's own error message back to the model for up to
+         │ --max-repair rounds (default 1). Every repaired query goes
+         │ through validate_select_only — and the confirm prompt, in the
+         │ REPL — before it is executed. Empty results never trigger a
+         │ repair: an empty result is often the right answer.
          ▼
 ┌──────────────────┐
 │ render.py        │  Format as a rich.Table. NULLs styled, large blobs
@@ -86,6 +92,7 @@ question
 | `retrieval.py`    | Tokenizer, TF-IDF ranker, FK-graph expander.                              |
 | `llm.py`          | Provider clients (Anthropic, OpenAI), SQL extractor, provider factory.    |
 | `prompts.py`      | System prompt template and schema-to-prompt formatter.                    |
+| `repair.py`       | Execution-guided repair: bounded retry loop fed by the database's errors. |
 | `safety.py`       | The sqlglot-based query guard.                                            |
 | `render.py`       | SQL syntax rendering and result-table rendering with rich.                |
 
@@ -96,12 +103,13 @@ question
 - **`cli.py` ↔ everything else** — the only file that knows the full pipeline. New stages (query history, post-execution feedback) wire in here.
 - **`safety.py` ↔ `llm.py`** — `extract_sql` runs first; `validate_select_only` runs second. Together they handle the case where the model returns malformed output.
 - **`db.py` ↔ `safety.py`** — two layers, intentionally redundant. Either alone is insufficient; both together make a write impossible.
+- **`repair.py` ↔ `safety.py`** — every repaired query is re-validated before execution. The repair loop widens what the model can fix; it never widens what can run.
 
 ## Design bets
 
 ### Why TF-IDF, not embeddings (yet)
 
-TF-IDF works the moment you connect to a database. No model to download, no GPU, no API call to compute embeddings for hundreds of tables. The cost is that it cannot reason about synonyms — "customer" and "user" are different tokens to TF-IDF. That is the tradeoff v0.2 will revisit by adding embedding-based ranking as an optional layer on top.
+TF-IDF works the moment you connect to a database. No model to download, no GPU, no API call to compute embeddings for hundreds of tables. The cost is that it cannot reason about synonyms — "customer" and "user" are different tokens to TF-IDF. Since 0.2 the LLM table-selector covers that gap (it sees the TF-IDF candidates and picks semantically), and measured retrieval recall on a 211-table benchmark sits at 98–100% without embeddings. Embeddings stay off the default path until the data shows a gap they would close.
 
 ### Why a separate FK-expansion pass
 
@@ -117,9 +125,9 @@ This redundancy is not paranoia. AI-generated SQL is, by construction, less pred
 
 `pg_catalog` is faster, more complete, and lets us read table comments via `obj_description`. We use `LATERAL unnest WITH ORDINALITY` to join `pg_constraint.conkey` with `pg_constraint.confkey` by ordinal position — the only correct way to handle composite foreign keys.
 
-## What's not in v0.1
+## What's intentionally not here
 
-These are intentionally out of scope for the MVP. They are tracked in the [roadmap](README.md#roadmap).
+These are out of scope for now. They are tracked in the [roadmap](README.md#roadmap).
 
 - MySQL / SQLite support — needs an adapter abstraction first.
 - Multi-database sessions in one REPL.
@@ -136,7 +144,7 @@ Run the test suite:
 pytest
 ```
 
-All tests in v0.1 are pure Python — no live database required. The integration test harness (docker-compose + a real Postgres) is queued for v0.2 alongside the public benchmark suite against Spider / BIRD.
+All tests are pure Python — no live database or API key required. The repair loop, prompt serialization, safety guard, retrieval, and CLI outcome logic are covered with in-memory fakes.
 
 The most safety-critical file is `tests/test_safety.py`. Cases there encode "things the validator MUST reject." Add cases when you discover new attack vectors; do not delete cases during refactors.
 
