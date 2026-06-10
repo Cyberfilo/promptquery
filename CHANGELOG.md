@@ -6,6 +6,12 @@ Generation-quality release. The retrieval side has been measuring at 98–100% r
 benchmark for a while; the misses were in the SQL itself. This release attacks the three error
 classes that benchmarking surfaced.
 
+**Measured result** (100-question NL→SQL suite, 211-table Postgres schema, gpt-4o, temperature 0,
+single-state execution accuracy, same harness and conditions as the 0.2.2 run): **EX 58% → 72%**,
+hard errors **7 → 0**, row-level Soft-F1 60.2 → 73.9, Set-Recall 98% → 99%. Cost of the new
+context: +10% prompt tokens (4,257 → 4,689 per query) and ~+200 ms per query for repair rounds
+on failing queries.
+
 - **Enum-aware schema prompts.** The schema sent to the model now includes column comments and the
   full legal value list of every enum column (read from `pg_catalog`, cached with the schema). The
   single biggest failure class in our benchmarking was the model inventing enum values
