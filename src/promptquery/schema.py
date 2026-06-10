@@ -13,6 +13,10 @@ class Column:
     data_type: str
     nullable: bool
     is_primary_key: bool
+    comment: str | None = None
+    # For enum-typed columns: every legal label, in enum order. The generator must see
+    # these — an enum value it can't see is an enum value it will invent.
+    enum_values: tuple[str, ...] | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -20,15 +24,20 @@ class Column:
             "data_type": self.data_type,
             "nullable": self.nullable,
             "is_primary_key": self.is_primary_key,
+            "comment": self.comment,
+            "enum_values": list(self.enum_values) if self.enum_values else None,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "Column":
+        enum_values = data.get("enum_values")
         return cls(
             name=data["name"],
             data_type=data["data_type"],
             nullable=bool(data["nullable"]),
             is_primary_key=bool(data["is_primary_key"]),
+            comment=data.get("comment"),
+            enum_values=tuple(enum_values) if enum_values else None,
         )
 
 
@@ -130,10 +139,16 @@ SELECT n.nspname AS schema,
            WHERE i.indrelid = c.oid
              AND i.indisprimary
              AND a.attnum = ANY(i.indkey)
-       ) AS is_primary_key
+       ) AS is_primary_key,
+       col_description(c.oid, a.attnum) AS comment,
+       CASE WHEN t.typtype = 'e' THEN (
+           SELECT array_agg(e.enumlabel ORDER BY e.enumsortorder)
+           FROM pg_enum e WHERE e.enumtypid = t.oid
+       ) END AS enum_values
 FROM pg_attribute a
 JOIN pg_class c ON c.oid = a.attrelid
 JOIN pg_namespace n ON n.oid = c.relnamespace
+JOIN pg_type t ON t.oid = a.atttypid
 WHERE a.attnum > 0
   AND NOT a.attisdropped
   AND c.relkind IN ('r', 'v', 'm', 'p', 'f')
@@ -185,11 +200,14 @@ def introspect(db: "Database") -> Schema:
         table = tables.get(key)
         if table is None:
             continue
+        enum_values = row.get("enum_values")
         table.columns.append(Column(
             name=row["name"],
             data_type=row["data_type"],
             nullable=bool(row["nullable"]),
             is_primary_key=bool(row["is_primary_key"]),
+            comment=row.get("comment"),
+            enum_values=tuple(enum_values) if enum_values else None,
         ))
 
     for row in fks_rows:

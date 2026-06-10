@@ -122,8 +122,9 @@ question
          │
          ▼
 ┌───────────────────┐
-│ SQL generator     │  Your real LLM call. Receives ~25 tables, not 675.
-│ (frontier model)  │
+│ SQL generator     │  Your real LLM call. Receives ~25 tables, not 675 —
+│ (frontier model)  │  with column comments and every enum's legal values,
+│                   │  so it filters on real states instead of guessing them.
 └────────┬──────────┘
          │
          ▼
@@ -134,6 +135,15 @@ question
          │
          ▼
    "Run? [y/N]" → execute against a read-only Postgres session
+         │
+         ▼
+┌───────────────────┐
+│ Self-repair       │  If the database rejects the query, the error message
+│ (on error only)   │  goes back to the model for one corrected attempt
+│                   │  (--max-repair). Repaired SQL is re-validated and
+│                   │  re-confirmed before it runs. Empty results are never
+│                   │  "repaired" — empty is often the right answer.
+└───────────────────┘
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the deep dive (file inventory, design bets, the patent-landmine non-goals).
@@ -149,6 +159,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the deep dive (file inventory, design
 | `--top-k` | 50 | TF-IDF candidates passed to the LLM selector |
 | `--select` | 15 | Tables the LLM selector picks from those candidates |
 | `--max-tables` | 25 | Cap after FK expansion — what the SQL generator actually sees |
+| `--max-repair` | 1 | Repair rounds when the database rejects a query (0 disables) |
 | `--no-selector` | — | Skip the LLM selector (v0.1 behaviour: TF-IDF + FK only) |
 | `-y, --yes` | — | Skip the confirmation prompt before running |
 
@@ -255,7 +266,7 @@ python3.12 -m venv .venv
 .venv/bin/python -m eval.retrieval
 ```
 
-37 tests, all pure-Python — no live database or API key required for the core suite.
+66 tests, all pure-Python — no live database or API key required for the core suite.
 
 ---
 
