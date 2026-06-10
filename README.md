@@ -1,11 +1,17 @@
-# PromptQuery
+<p align="center">
+  <a href="https://prq.menghi.dev">
+    <img src="https://raw.githubusercontent.com/Cyberfilo/promptquery/main/docs/brand/banner.png" alt="PromptQuery — SQL is engineering, not conversation" width="820">
+  </a>
+</p>
 
-> **Natural-language SQL for production-scale Postgres schemas.**
+<p align="center"><strong>Natural-language SQL for production-scale Postgres schemas.</strong></p>
 
-[![PyPI](https://img.shields.io/pypi/v/promptquery.svg)](https://pypi.org/project/promptquery/)
-[![CI](https://github.com/Cyberfilo/promptquery/actions/workflows/ci.yml/badge.svg)](https://github.com/Cyberfilo/promptquery/actions/workflows/ci.yml)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Python: 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+<p align="center">
+  <a href="https://pypi.org/project/promptquery/"><img src="https://img.shields.io/pypi/v/promptquery?color=4ee07a&labelColor=0a0b10" alt="PyPI"></a>
+  <a href="https://github.com/Cyberfilo/promptquery/actions/workflows/ci.yml"><img src="https://github.com/Cyberfilo/promptquery/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-4ee07a?labelColor=0a0b10" alt="License: Apache 2.0"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/python-3.10%2B-4ee07a?labelColor=0a0b10" alt="Python: 3.10+"></a>
+</p>
 
 PromptQuery is an open-source CLI that lets you query Postgres in plain English — engineered for **real production schemas with hundreds of tables**, not toy demos. It introspects your schema, generates SQL, shows it for confirmation, and runs it read-only.
 
