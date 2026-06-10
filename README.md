@@ -18,7 +18,26 @@ PromptQuery is an open-source CLI that lets you query Postgres in plain English 
 
 ## The numbers
 
-Two independent production-scale schemas. SQL generation: `gpt-4o`. Table selection: `gpt-4o-mini`.
+### Execution accuracy — 211-table benchmark, v0.3.0
+
+Measured on [heron](https://github.com/Cyberfilo/heron), an independent open benchmark: a seeded
+211-table / 14-schema Postgres database (4.4M rows) with 100 audited questions, scored by
+**execution-equality** (the query runs and returns the right rows). Conditions: `gpt-4o`,
+temperature 0, single-state EX@1. Receipts: [`results_prq_v031.json` (heron PR #1)](https://github.com/Cyberfilo/heron/pull/1).
+
+| | v0.2.2 | **v0.3.0** |
+|---|---:|---:|
+| Execution accuracy (EX@1) | 58% | **72%** |
+| Hard DB errors | 7/100 | **0/100** |
+| Schema-retrieval recall | 98% | 99% |
+| Tokens / query | 4,257 | 4,689 |
+
+Same benchmark, same model, same questions — only the package version changed. Where it still
+falls short, on purpose and in the open: window-function questions sit at 20%, multi-join at 50%.
+
+### Retrieval accuracy — two more production-scale schemas (v0.2)
+
+SQL generation: `gpt-4o`. Table selection: `gpt-4o-mini`.
 
 **What "accuracy" means here:** a question passes only if the generated SQL references *every* table the question needs and *invents none* (parsed with `sqlglot`). These two schemas ship without seeded data, so queries are parsed, not executed — execution-equality is measured separately on the seeded `shop` fixture (see [Benchmark](#benchmark)). Finding the right handful of tables out of hundreds is the hard part, and this measures exactly that. "Tokens / query" is the SQL-generator prompt size, measured with `tiktoken`.
 
@@ -246,8 +265,12 @@ See [`eval/END_TO_END.md`](eval/END_TO_END.md) for the harness internals.
 ## Roadmap
 
 - **v0.2 (shipped)** — LLM-assisted table selector, stemmed TF-IDF.
-- **v0.3** — local LLMs (Ollama), schema anonymisation (GDPR-by-default), query-history-as-few-shot.
-- **v0.4** — MySQL + SQLite adapters, MCP server mode, public competitor benchmark.
+- **v0.3 (shipped)** — enum-aware schema prompts, execution-guided self-repair (`--max-repair`),
+  answer-shape generation rules. EX 58% → 72% on the 100-question benchmark.
+- **v0.4** — value/literal linking (match question terms to actual cell values), opt-in
+  multi-candidate generation (`--thorough`), window-function/composition work.
+- **Later** — MySQL + SQLite adapters, MCP server mode, local LLMs (Ollama), schema anonymisation,
+  query-history-as-few-shot.
 
 ---
 
