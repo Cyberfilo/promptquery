@@ -13,7 +13,7 @@ geometry as the website favicon. Mirrors [prq.menghi.dev](https://prq.menghi.dev
 | blue | `#76a9ff` | secondary accent (read-only) |
 
 Type: **JetBrains Mono** (mark / wordmark / code) + **IBM Plex Sans** (body). Wordmark is
-`promptQuery` with `Query` in green. Tagline: **"SQL is engineering, not conversation."**
+**`PromptQuery`** with `Query` in green. Tagline: **"SQL is engineering, not conversation."**
 
 ## Files
 | File | Purpose |
