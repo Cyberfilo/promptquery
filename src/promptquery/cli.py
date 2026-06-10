@@ -18,6 +18,7 @@ from .db import Database
 from .llm import LLMClient, LLMError, extract_sql, make_client
 from .prompts import build_system_prompt
 from .render import render_results, render_sql
+from .repair import execute_with_repair
 from .retrieval import TfIdfRetriever, expand_via_fks, llm_select_tables
 from .safety import UnsafeQuery, validate_select_only
 from .schema import Schema, introspect
@@ -87,6 +88,7 @@ def run_question(
     select_n: int,
     max_tables: int,
     confirm: bool,
+    max_repair: int = 1,
     progress: Console | None = None,
     prompt_for_confirm=None,
 ) -> QueryResult:
@@ -139,12 +141,30 @@ def run_question(
         if answer not in {"y", "yes"}:
             return QueryResult(Outcome.SKIPPED, sql, [], [], "user declined")
 
-    try:
-        cols, rows = db.execute(sql)
-    except Exception as e:
-        return QueryResult(Outcome.EXEC_ERROR, sql, [], [], str(e))
+    def _confirm_repaired(repaired_sql: str) -> bool:
+        if not confirm:
+            return True
+        if progress:
+            render_sql(progress, repaired_sql)
+        if prompt_for_confirm is None:
+            return False
+        return prompt_for_confirm().strip().lower() in {"y", "yes"}
 
-    return QueryResult(Outcome.OK, sql, cols, rows)
+    result = execute_with_repair(
+        db, llm, system_prompt, question, sql,
+        max_repair=max_repair,
+        confirm_cb=_confirm_repaired if confirm else None,
+        progress_cb=(lambda msg: progress.print(f"[yellow]{msg}[/yellow]")) if progress else None,
+    )
+    if result.declined:
+        return QueryResult(Outcome.SKIPPED, result.sql, [], [], "user declined")
+    if result.error is not None:
+        return QueryResult(Outcome.EXEC_ERROR, result.sql, [], [], result.error)
+    if result.attempts and progress and not confirm:
+        # Show the repaired SQL that actually ran (confirm mode already displayed it).
+        render_sql(progress, result.sql)
+
+    return QueryResult(Outcome.OK, result.sql, result.cols, result.rows)
 
 
 # -- CLI -------------------------------------------------------------------
@@ -195,6 +215,13 @@ def run_question(
     help="Maximum tables sent to the LLM after FK expansion.",
 )
 @click.option(
+    "--max-repair",
+    default=1,
+    show_default=True,
+    help="Repair rounds when a query fails: feed the database error back to the model "
+         "and retry. 0 disables repair.",
+)
+@click.option(
     "--no-selector",
     is_flag=True,
     help="Disable the LLM table-selector and use TF-IDF + FK expansion only (v0.1 behavior).",
@@ -208,7 +235,7 @@ def run_question(
 @click.version_option(__version__, prog_name="promptquery")
 def main(dsn: str, model: str | None, selector_model: str | None,
          query: str | None, out_format: str | None,
-         top_k: int, select_n: int, max_tables: int,
+         top_k: int, select_n: int, max_tables: int, max_repair: int,
          no_selector: bool, yes: bool) -> None:
     """PromptQuery — natural-language SQL for Postgres.
 
@@ -276,27 +303,27 @@ def main(dsn: str, model: str | None, selector_model: str | None,
                 question=query, schema=schema, retriever=retriever,
                 llm=llm, selector_llm=selector_llm, db=db_ctx,
                 top_k=top_k, select_n=select_n, max_tables=max_tables,
-                out_fmt=out_fmt, progress=progress,
+                max_repair=max_repair, out_fmt=out_fmt, progress=progress,
             ))
 
         _run_repl(
             schema=schema, retriever=retriever,
             llm=llm, selector_llm=selector_llm, db=db_ctx,
             top_k=top_k, select_n=select_n, max_tables=max_tables,
-            out_fmt=out_fmt, yes=yes, progress=progress,
+            max_repair=max_repair, out_fmt=out_fmt, yes=yes, progress=progress,
         )
     finally:
         db_ctx.close()
 
 
 def _run_one_shot(*, question, schema, retriever, llm, selector_llm, db,
-                  top_k, select_n, max_tables, out_fmt: OutputFormat,
-                  progress: Console) -> int:
+                  top_k, select_n, max_tables, max_repair,
+                  out_fmt: OutputFormat, progress: Console) -> int:
     result = run_question(
         question=question, schema=schema, retriever=retriever,
         llm=llm, selector_llm=selector_llm, db=db,
         top_k=top_k, select_n=select_n, max_tables=max_tables,
-        confirm=False, progress=progress,
+        max_repair=max_repair, confirm=False, progress=progress,
     )
 
     if result.outcome is Outcome.LLM_ERROR:
@@ -325,8 +352,8 @@ def _run_one_shot(*, question, schema, retriever, llm, selector_llm, db,
 
 
 def _run_repl(*, schema, retriever, llm, selector_llm, db,
-              top_k, select_n, max_tables, out_fmt: OutputFormat,
-              yes: bool, progress: Console) -> None:
+              top_k, select_n, max_tables, max_repair,
+              out_fmt: OutputFormat, yes: bool, progress: Console) -> None:
     session: PromptSession[str] = PromptSession(history=InMemoryHistory())
     progress.print(
         "\n[bold]PromptQuery[/bold] — ask a question in plain English, "
@@ -348,7 +375,7 @@ def _run_repl(*, schema, retriever, llm, selector_llm, db,
             question=question, schema=schema, retriever=retriever,
             llm=llm, selector_llm=selector_llm, db=db,
             top_k=top_k, select_n=select_n, max_tables=max_tables,
-            confirm=not yes, progress=progress,
+            max_repair=max_repair, confirm=not yes, progress=progress,
             prompt_for_confirm=(lambda: session.prompt("Run? [y/N] ")) if not yes else None,
         )
 
