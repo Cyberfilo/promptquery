@@ -103,7 +103,7 @@ def make_client(model_spec: str | None = None) -> LLMClient:
             # No explicit provider — guess from model name
             if provider.startswith("claude"):
                 return AnthropicClient(model=provider)
-            if provider.startswith("gpt") or provider.startswith("o1") or provider.startswith("o3"):
+            if provider.startswith(("gpt", "o1", "o3", "o4")):
                 return OpenAIClient(model=provider)
             raise LLMError(
                 f"Cannot infer provider from model {provider!r}. "
