@@ -179,7 +179,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the deep dive (file inventory, design
 
 | Flag | Default | Description |
 |---|---|---|
-| `--model` | auto-detect | LLM for SQL generation (e.g. `gpt-4o`, `claude-sonnet-4-6`, `anthropic/claude-opus-4-7`) |
+| `--model` | auto-detect | LLM for SQL generation (e.g. `gpt-4o`, `claude-sonnet-4-6`, `anthropic/claude-opus-4-7`, `ollama/llama3`) |
 | `--selector-model` | same as `--model` | LLM for the table-selector step. **A cheaper model is recommended** (e.g. `gpt-4o-mini`) |
 | `--top-k` | 50 | TF-IDF candidates passed to the LLM selector |
 | `--select` | 15 | Tables the LLM selector picks from those candidates |
@@ -194,8 +194,11 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the deep dive (file inventory, design
 |---|---|
 | `OPENAI_API_KEY` | Use OpenAI as the LLM provider |
 | `ANTHROPIC_API_KEY` | Use Anthropic as the LLM provider |
+| `OLLAMA_BASE_URL` | Override the Ollama server URL (default `http://localhost:11434`) |
 
-If both are set, Anthropic is preferred. Override either with `--model anthropic/<name>` or `--model openai/<name>`.
+If both API keys are set, Anthropic is preferred. Override with `--model anthropic/<name>`,
+`--model openai/<name>`, or `--model ollama/<name>`. Ollama uses the local OpenAI-compatible
+endpoint and does not require an API key.
 
 ---
 
